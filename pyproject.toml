@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "simx"
+version = "0.1.0"
+description = ""
+authors = ["jan <jan.gobeli@protonmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typing = "^3.10.0.0"
+sortedcontainers = "^2.4.0"
+dataclasses = "^0.8"
+enum = "^0.4.7"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -34,6 +34,7 @@ class Order:
     order_id: int = field(default_factory=count().__next__, init=False)
     symbol: str
     side: bool
+    taker: bool
     amount: float
     remainingAmount: float = field(init=False)
     price: float

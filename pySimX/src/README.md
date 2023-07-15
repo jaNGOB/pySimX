@@ -12,6 +12,8 @@ Possible interractions:
 - `cancel_order(order)`
 - `fetch_tob(symbol)`
 
+### Prepare Exchange
+To prepare the exchange, the TOB events need to be loaded in. The format for this is `[timestamp, bid_amount, bid_price, ask_price, ask_amount]` which can be loaded in through the `load_tob(updates, symbol)` function. 
 
 ### Latency Simulation
 

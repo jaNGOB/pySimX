@@ -6,10 +6,11 @@ Here we define the exchange object. Within it, we have the logic for:
 - Execute Orders (Limit and Market)
 - Spot (Base, Quote balances)
 - Modify Orders
+- Delete Orders 
 
 TODO: 
-- Delete Orders 
 - Add Futures support
+- Communication on confirmations, etc. 
 
 """
 from typing import List, Literal, Optional

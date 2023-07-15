@@ -3,15 +3,15 @@ SimX is an event-driven backtester that simulates a multi-asset exchange, includ
 
 ## Features
 - **Multi-Asset Simulation**: SimX allows you to trade multiple assets simultaneously, offering a more realistic testing environment for your trading algorithms.
-- **Latency Simulation**: It's important to account for network latency and other real-world considerations. SimX includes a latency simulation to make your testing more accurate.
-- **Fill Strategies**: Experiment with different fill strategies to optimize your trading algorithm.
-- **Three Simulation Modes**: Depending on your access to data, SimX offers multiple modes to accomodate for it. TOB, Orderbook and OHLCV simulator. 
+- **Latency Simulation**: The current latency is based on a lognormal distribution on all communications with the exchange (POST and GET)
+- **Fill Strategies**: Right now the baseline strategy implemented is a pessimistic filling one with no market impact. While Market orders are crossing the book, the limit orders are only triggered if the oposite side is at the same price or worse. 
+- **Three Simulation Modes**: Depending on your access to data, SimX offers multiple modes to accomodate for it. TOB, Orderbook and OHLCV simulator. Right now TOB
 
-## Installation
-Instructions on how to install and setup SimX.
 
 ## Usage
-Instructions on how to use SimX, along with code snippets.
+A few examples are provided: 
+- OB-Imbalance: Buy if the top-of-book is dominated by buy pressure and sell if the opposite is true. 
+- Cross-ex arbitrage: Replicate a book on a second exchange and hedge with a market order after the resting orders are hit on the origin.
 
 ## Contributing
 We appreciate all contributions. Please read our contributing guidelines before submitting a pull request.

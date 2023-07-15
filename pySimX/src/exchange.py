@@ -266,7 +266,6 @@ class TOB_Exchange(Exchange):
         # else, check that we have enough base to sell it
         else:
             if self.balance[self.market_mapping[order.symbol][0]] < order.amount:
-                print("not enough")
                 return False
 
         return True
@@ -297,7 +296,7 @@ class TOB_Exchange(Exchange):
         if timestamp not in self.events.keys():
             self.events[timestamp] = deque()
 
-        self.events[timestamp].append(CancelOrder(order=order))
+        self.events[timestamp].append(CancelOrder(symbol=order.symbol, order=order))
 
     def modify_order(
         self,
@@ -311,7 +310,7 @@ class TOB_Exchange(Exchange):
         Finally we add some latency and append it to the events queue.
         """
 
-        new_order = ModifyOrder(order=order)
+        new_order = ModifyOrder(symbol=order.symbol, order=order)
 
         # If there is a change in price, add the information to the new_order
         if price != None:
@@ -360,7 +359,7 @@ class TOB_Exchange(Exchange):
             ):
                 order = self.open_orders[symbol][1].popitem(0)
                 # If the price moved in the meantime which leads to direct execution, it was a taker
-                if order[1].timestamp == timestamp:
+                if order[1].entryTime == timestamp:
                     order[1].taker = True
 
                 self.open_position(order=order[1], timestamp=timestamp)
@@ -376,7 +375,7 @@ class TOB_Exchange(Exchange):
             ):
                 order = self.open_orders[symbol][0].popitem(-1)
                 # If the price moved in the meantime which leads to direct execution, it was a taker
-                if order[1].timestamp == timestamp:
+                if order[1].entryTime == timestamp:
                     order[1].taker = True
 
                 self.open_position(order=order[1], timestamp=timestamp)

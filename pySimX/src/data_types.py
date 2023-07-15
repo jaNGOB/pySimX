@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from itertools import count
-from typing import Literal, Optional
+from typing import Optional
 from enum import Enum
 from collections import OrderedDict
 
@@ -50,6 +50,7 @@ class Order:
 # Modify Order
 @dataclass
 class ModifyOrder:
+    symbol: str
     order: Order
     new_amount: Optional[float]
     new_price: Optional[float]
@@ -57,6 +58,7 @@ class ModifyOrder:
 
 @dataclass
 class CancelOrder:
+    symbol: str
     order: Order
 
 

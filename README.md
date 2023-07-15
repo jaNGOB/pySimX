@@ -10,8 +10,8 @@ SimX is an event-driven backtester that simulates a multi-asset exchange, includ
 
 ## Usage
 A few examples are provided: 
-- OB-Imbalance: Buy if the top-of-book is dominated by buy pressure and sell if the opposite is true. 
-- Cross-ex arbitrage: Replicate a book on a second exchange and hedge with a market order after the resting orders are hit on the origin.
+- [OB-Imbalance](https://github.com/jaNGOB/pySimX/blob/main/pySimX/examples/tob_imbalance.ipynb): Buy if the top-of-book is dominated by buy pressure and sell if the opposite is true. 
+- [Cross-ex arbitrage](https://github.com/jaNGOB/pySimX/blob/main/pySimX/examples/upbit_strat.ipynb): Replicate a book on a second exchange and hedge with a market order after the resting orders are hit on the origin.
 
 ## Contributing
 We appreciate all contributions. Please read our contributing guidelines before submitting a pull request.

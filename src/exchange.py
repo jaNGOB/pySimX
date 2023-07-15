@@ -31,7 +31,9 @@ class Exchange:
 
         self.positions = {}
         self.open_orders = {}
-        self.trades = SortedDict()
+        self.trades = []
+
+        self.historical_balance = []
 
     def add_market(self, symbol: str, base: str, quote: str):
         self.market_mapping[symbol] = [base, quote]
@@ -44,6 +46,15 @@ class Exchange:
         ta = self.markets[symbol].ap
         print(f"Bid: {tb} | {ta} :Ask")
         return [tb, ta]
+
+    def _update_balance(self, symbol):
+        update = self.balance.copy()
+        update["mid"] = (
+            self.markets[symbol].ap.copy() + self.markets[symbol].bp.copy()
+        ) / 2
+        update["ts"] = self.markets[symbol].timestamp
+
+        self.historical_balance.append(update)
 
     def _open_orders(self):
         return True if len(self.open_orders) > 0 else False
@@ -85,7 +96,7 @@ class Exchange:
         ) * (order.side * 2 - 1)
         # self.positions[order.symbol] = order.amount
 
-        self.trades[timestamp] = new_trade
+        self.trades.append(new_trade)
 
     def close_position(self, symbol: str, price: float):
         print("Position Closed")
@@ -142,7 +153,7 @@ class TOB_Exchange(Exchange):
             print(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
 
     def load_trades(self, symbol: str, trades: List[float]) -> None:
-        self.trades[symbol] = trades
+        self.trades.append(trades)
 
     def load_tob(self, tob_updates: List[float], symbol: str) -> None:
         # Initialize a orders queue
@@ -304,16 +315,19 @@ class TOB_Exchange(Exchange):
         self.events[timestamp].append(new_order)
 
     def _execute_market(self, event: Order) -> None:
+        # We chose the Ask Price if we buy, the Bid Price if we sell
         price = (
             self.markets[event.symbol].ap
             if event.side
             else self.markets[event.symbol].bp
         )
 
+        # Update the price of the Order event
         event.price = price
 
-        check = self._check_balance(event)
-        if check:
+        # Double check that we have enough balance available to execute the order
+        if self._check_balance(event):
+            # Open the position if the balance is okay
             self.open_position(order=event, timestamp=event.entryTime)
 
     def _check_match(self, symbol: str, timestamp: int):
@@ -397,3 +411,4 @@ class TOB_Exchange(Exchange):
         while len(self.events) > 0:
             strat.run_strategy()
             self._simulation_step()
+            self._update_balance("COMPBTC")

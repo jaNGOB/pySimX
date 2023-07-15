@@ -247,6 +247,7 @@ class TOB_Exchange(Exchange):
         # else, check that we have enough base to sell it
         else:
             if self.balance[self.market_mapping[order.symbol][0]] < order.amount:
+                print("not enough")
                 return False
 
         return True

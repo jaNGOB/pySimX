@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "simx"
+name = "pySimX"
 version = "0.1.0"
 description = ""
 authors = ["jan <jan.gobeli@protonmail.com>"]

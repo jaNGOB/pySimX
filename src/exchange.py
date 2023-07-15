@@ -22,11 +22,11 @@ from .data_types import TOB, Order, Trade, ModifyOrder
 
 class Exchange:
     def __init__(self, fees: List[int] = [0, 2]):
-        self.maker_fee = fees[0]
-        self.taker_fee = fees[1]
+        self.maker_fee = fees[0] / 10_000
+        self.taker_fee = fees[1] / 10_000
         self.balance = {}
 
-        self.market = {}
+        self.markets = {}
         self.market_mapping = {}
 
         self.positions = {}
@@ -108,18 +108,27 @@ class TickExchange(Exchange):
 
 
 class TOB_Exchange(Exchange):
-    def __init__(
-        self, initial_balance: int = 10000, fees: List[int] = [0, 2], latency=[200, 15]
-    ):
-        super().__init__(initial_balance, fees)
+    def __init__(self, fees: List[int] = [0, 2], latency=[200, 15]):
+        super().__init__(fees)
 
         self.events = {}
         self.latency_mean = latency[0]
         self.latency_dev = latency[1]
 
     def _add_latency(self, timestamp: int):
-        timestamp += np.random.lognormal(0, self.latency_dev, 1) * self.latency_mean
+        timestamp += np.random.lognormal(0, self.latency_dev, 1)[0] * self.latency_mean
         return timestamp
+
+    def fetch_tob(self, symbol) -> dict[float]:
+        update = self.markets[symbol]
+        out = {
+            "timestamp": self._add_latency(update.timestamp),
+            "bid_quantity": update.bq,
+            "bid_price": update.bp,
+            "ask_price": update.ap,
+            "ask_quantity": update.ap,
+        }
+        return out
 
     def overview(self, symbol: str) -> None:
         print(f"Bid: {self.markets[symbol].bp:>8} | {self.markets[symbol].ap:>8} :Ask")
@@ -161,7 +170,9 @@ class TOB_Exchange(Exchange):
                 TOB(symbol=symbol, timestamp=i[0], bq=i[1], bp=i[2], ap=i[3], aq=i[4])
             )
 
-    def market_order(self, symbol: str, amount: float, side: bool) -> None:
+    def market_order(
+        self, symbol: str, amount: float, side: bool, timestamp: int
+    ) -> None:
         """
 
         :param symbol: (str) Symbol of the traded pair
@@ -171,7 +182,7 @@ class TOB_Exchange(Exchange):
         :return: None
         """
         # Add latency to the timestamp of the last TOB update
-        timestamp = self._add_latency(self.markets[symbol].timestamp)
+        timestamp = self._add_latency(timestamp)
 
         # If there is already an event in the queue at that time, add it at the end
         if timestamp not in self.events.keys():
@@ -188,7 +199,9 @@ class TOB_Exchange(Exchange):
             )
         )
 
-    def limit_order(self, symbol: str, amount: float, price: float, side: bool) -> None:
+    def limit_order(
+        self, symbol: str, amount: float, price: float, side: bool, timestamp: int
+    ) -> None:
         """
         Function that adds an order to the events queue. First there is some added
         Latency that can be defined in the initiation of the exchange object itself.
@@ -203,7 +216,7 @@ class TOB_Exchange(Exchange):
         :return: None
         """
         # Add latency to the timestamp of the last TOB update
-        timestamp = self._add_latency(self.markets[symbol].timestamp)
+        timestamp = self._add_latency(timestamp)
 
         # If there is already an event in the queue at that time, add it at the end
         if timestamp not in self.events.keys():
@@ -219,6 +232,24 @@ class TOB_Exchange(Exchange):
                 entryTime=timestamp,
             )
         )
+
+    def _check_balance(self, order):
+        """
+        Sanity check that we have enough balance to execute such an order before we even place it.
+        """
+        # If it is a buy, check that we have enough quote currency available to buy the base
+        if order.side:
+            if (
+                self.balance[self.market_mapping[order.symbol][1]]
+                < order.amount * order.price
+            ):
+                return False
+        # else, check that we have enough base to sell it
+        else:
+            if self.balance[self.market_mapping[order.symbol][0]] < order.amount:
+                return False
+
+        return True
 
     def _execute_modification(self, order: ModifyOrder) -> None:
         """
@@ -279,7 +310,10 @@ class TOB_Exchange(Exchange):
         )
 
         event.price = price
-        self.open_position(order=event, timestamp=event.entryTime)
+
+        check = self._check_balance(event)
+        if check:
+            self.open_position(order=event, timestamp=event.entryTime)
 
     def _check_match(self, symbol: str, timestamp: int):
         # If there is a buy order and the price is above the current ask price, we execute it
@@ -340,7 +374,9 @@ class TOB_Exchange(Exchange):
                 self._execute_market(event)
             # If its a limit order, put it into the open orders that wait for execution
             else:
-                self.open_orders[event.symbol][event.side][event.price] = event
+                check = self._check_balance(event)
+                if check:
+                    self.open_orders[event.symbol][event.side][event.price] = event
 
         # If the event is a modification, change the order in question.
         elif type(event) == ModifyOrder:
@@ -356,6 +392,7 @@ class TOB_Exchange(Exchange):
         # self.overview(event.symbol)
 
     def run_simulation(self, strategy):
+        strat = strategy()
         while len(self.events) > 0:
-            strategy(self.markets, self.open_orders, self.balance)
+            strat.run_strategy()
             self._simulation_step()

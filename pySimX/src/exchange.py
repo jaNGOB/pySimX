@@ -17,7 +17,7 @@ import numpy as np
 from collections import deque
 from sortedcontainers import SortedDict
 from .matching_engine import OrderBook
-from .data_types import TOB, Order, Trade, ModifyOrder
+from .data_types import TOB, Order, Trade, ModifyOrder, CancelOrder
 
 
 class Exchange:
@@ -285,6 +285,19 @@ class TOB_Exchange(Exchange):
                 o.price = order.new_price
                 o.amount = order.new_amount
 
+    def _execute_cancellation(self, order: CancelOrder):
+        cancelled_order = order.order
+        self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
+            cancelled_order.price
+        )
+
+    def cancel_order(self, order: Order) -> None:
+        timestamp = self._add_latency(self.markets[order.symbol].timestamp)
+        if timestamp not in self.events.keys():
+            self.events[timestamp] = deque()
+
+        self.events[timestamp].append(CancelOrder(order=order))
+
     def modify_order(
         self,
         order: Order,
@@ -403,6 +416,10 @@ class TOB_Exchange(Exchange):
         # If the event is a modification, change the order in question.
         elif type(event) == ModifyOrder:
             self._execute_modification(event)
+
+        # If the event is a cancellation, cancel the order
+        elif type(event) == CancelOrder:
+            self._execute_cancellation(event)
 
         # Remove the event timestamp if there are no more in the queue at that time
         if len(self.events.peekitem(0)[1]) == 0:

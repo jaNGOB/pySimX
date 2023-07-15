@@ -55,6 +55,11 @@ class ModifyOrder:
     new_price: Optional[float]
 
 
+@dataclass
+class CancelOrder:
+    order: Order
+
+
 # Trade definition
 @dataclass
 class Trade:

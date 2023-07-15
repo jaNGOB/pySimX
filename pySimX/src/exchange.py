@@ -80,6 +80,7 @@ class Exchange:
         Sell 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (0 * 2 -1) = 3'000 * -1 = -3'000
         """
         new_trade = Trade(
+            order.symbol,
             order.order_id,
             order.side,
             order.taker,
@@ -170,16 +171,27 @@ class TOB_Exchange(Exchange):
         for i in self.open_orders["COMPBTC"][0]:
             print(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
 
-    def load_trades(self, symbol: str, trades: List[float]) -> None:
+    def load_trades(self, trades: List[float], symbol: str) -> None:
         # Iterate through the trades that need to be added to the events
         for i in trades:
             # make sure the event has a queue at a given timestamp
             if i[0] not in self.events.keys():
                 self.events[i[0]] = deque()
 
+            side = 1 if i[2] == "buy" else 0
+
             # once were sure there is a queue, append the trade to the timestamp
             self.events[i[0]].append(
-                TOB(symbol=symbol, timestamp=i[0], bq=i[1], bp=i[2], ap=i[3], aq=i[4])
+                Trade(
+                    symbol=symbol,
+                    order_id=-1,
+                    side=side,
+                    taker=True,
+                    amount=i[4],
+                    price=i[3],
+                    entryTime=i[0],
+                    eventTime=i[0],
+                )
             )
 
     def load_tob(self, tob_updates: List[float], symbol: str) -> None:
@@ -366,6 +378,17 @@ class TOB_Exchange(Exchange):
             # Open the position if the balance is okay
             self.open_position(order=event, timestamp=event.entryTime)
 
+    def _check_match_trades(self, trade: Trade, timestamp: float) -> None:
+        if (trade.side == 1) and len(self.open_orders[trade.symbol][0]) > 0:
+            if self.open_orders[trade.symbol][0].peekitem(0)[1].price < trade.price:
+                order = self.open_orders[trade.symbol][0].popitem(0)
+                self.open_position(order=order[1], timestamp=timestamp)
+
+        elif (trade.side == 0) and len(self.open_orders[trade.symbol][1]) > 0:
+            if self.open_orders[trade.symbol][0].peekitem(0)[1].price < trade.price:
+                order = self.open_orders[trade.symbol][0].popitem(0)
+                self.open_position(order=order[1], timestamp=timestamp)
+
     def _check_match(self, symbol: str, timestamp: int):
         # If there is a buy order and the price is above the current ask price, we execute it
         if len(self.open_orders[symbol][1]) > 0:
@@ -439,7 +462,7 @@ class TOB_Exchange(Exchange):
 
         # If the event is a public trade, check if it would lead to execution
         elif type(event) == Trade:
-            pass
+            self._check_match_trades(event, ts)
 
         # Remove the event timestamp if there are no more in the queue at that time
         if len(self.events.peekitem(0)[1]) == 0:

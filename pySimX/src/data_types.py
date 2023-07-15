@@ -65,6 +65,7 @@ class CancelOrder:
 # Trade definition
 @dataclass
 class Trade:
+    symbol: str
     trade_id: int = field(default_factory=count().__next__, init=False)
     order_id: int
     side: bool

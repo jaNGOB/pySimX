@@ -21,6 +21,8 @@ Currently, latency is simulated using the following approach. We derived the ave
 
 This latency is added to the timestamp on orders and cancels that enter the system, as well as top-of-book updates that exit it. 
 
+![latency_example](prictures/latency.png)
+
 ### Fills
 Right now, an order is filled when the opposite top-of-book is equal or worse than the order price. 
 

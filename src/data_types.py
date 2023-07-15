@@ -37,7 +37,7 @@ class Order:
     taker: bool
     amount: float
     remainingAmount: float = field(init=False)
-    price: float
+    price: Optional[float]
     entryTime: int
     eventTime: Optional[int] = None
     status: OrderStatus = "open"
@@ -45,6 +45,14 @@ class Order:
 
     def __post_init__(self):
         self.remainingAmount = self.amount
+
+
+# Modify Order
+@dataclass
+class ModifyOrder:
+    order: Order
+    new_amount: Optional[float]
+    new_price: Optional[float]
 
 
 # Trade definition

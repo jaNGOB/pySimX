@@ -26,6 +26,9 @@ This latency is added to the timestamp on orders and cancels that enter the syst
 ### Fills
 Right now, an order is filled when the opposite top-of-book is equal or worse than the order price. 
 
+### Example
+In the imbalance example 
+
 
 
 ## TODO: 

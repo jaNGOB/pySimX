@@ -54,7 +54,13 @@ class Exchange:
 
         We update the base and quote balance in this example of a spot exchange.
 
+        Base update examples. balance += amount * (side * 2 -1).
+        Buy 0.1 BTC: balance['BTC'] += 0.1 * (1 * 2 - 1) = 0.1 * 1 = 0.1
+        Sell 0.1 BTC: balance['BTC'] += 0.1 * (0 * 2 - 1) = 0.1  * -1 = - 0.1
 
+        Quote update exmples. balance -= amount * price * (side * 2 -1)
+        Buy 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (1 * 2 -1) = 3'000 * 1 = 3'000
+        Sell 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (0 * 2 -1) = 3'000 * -1 = -3'000
         """
         new_trade = Trade(
             order.order_id,
@@ -65,20 +71,18 @@ class Exchange:
             order.entryTime,
             timestamp,
         )
-        print("Position Opened", new_trade)
+        print("Trade Executed", new_trade)
 
         order.eventTime = timestamp
 
-        # Update the base currency balance. Here we take the amount (in base) and multiply it by the side.
-        # This means that
-        self.balance[self.market_mapping[order.symbol][0]] += order.amount * order.side
-        self.balance[
-            self.market_mapping[order.symbol][1]
-        ] -= order.amount * order.price + abs(
-            order.amount * order.price * self.taker_fee
-        ) * (
-            -1 * order.side
+        # Balance update as described above
+        self.balance[self.market_mapping[order.symbol][0]] += order.amount * (
+            order.side * 2 - 1
         )
+        self.balance[self.market_mapping[order.symbol][1]] -= (
+            order.amount * order.price
+            + abs(order.amount * order.price * self.taker_fee)
+        ) * (order.side * 2 - 1)
         # self.positions[order.symbol] = order.amount
 
         self.trades[timestamp] = new_trade

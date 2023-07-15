@@ -1,4 +1,4 @@
-# SimX: The Multi-Asset Exchange Simulator
+# pySimX: The Multi-Asset Exchange Simulator
 SimX is an event-driven backtester that simulates a multi-asset exchange, including latency simulation and fill strategies. It serves as a platform for testing trading algorithms and strategies under realistic market conditions.
 
 ## Features

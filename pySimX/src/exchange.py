@@ -127,12 +127,22 @@ class TickExchange(Exchange):
 
 
 class TOB_Exchange(Exchange):
-    def __init__(self, fees: List[int] = [0, 2], latency=[200, 15]):
+    def __init__(self, fees: List[int] = [0, 2], latency=[2000, 0.2]):
+        """
+        Initialize the TOB Exchange.
+
+        :param fees: (List[int]) fees defined as basispoints [maker, taker]
+        :param latency: (List[int]) latency [mean, std] in us
+
+        """
         super().__init__(fees)
 
-        self.events = {}
+        # Define latency summary metrics
         self.latency_mean = latency[0]
         self.latency_dev = latency[1]
+
+        # Open a event queue for the symbol
+        self.events = SortedDict()
 
     def _add_latency(self, timestamp: int):
         timestamp += np.random.lognormal(0, self.latency_dev, 1)[0] * self.latency_mean
@@ -161,7 +171,16 @@ class TOB_Exchange(Exchange):
             print(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
 
     def load_trades(self, symbol: str, trades: List[float]) -> None:
-        self.trades.append(trades)
+        # Iterate through the trades that need to be added to the events
+        for i in trades:
+            # make sure the event has a queue at a given timestamp
+            if i[0] not in self.events.keys():
+                self.events[i[0]] = deque()
+
+            # once were sure there is a queue, append the trade to the timestamp
+            self.events[i[0]].append(
+                TOB(symbol=symbol, timestamp=i[0], bq=i[1], bp=i[2], ap=i[3], aq=i[4])
+            )
 
     def load_tob(self, tob_updates: List[float], symbol: str) -> None:
         # Initialize a orders queue
@@ -176,9 +195,6 @@ class TOB_Exchange(Exchange):
         )
         # The rest will be taken apart and used as events for the backtester
         # self._process_tob_updates(tob_updates[1:])
-
-        # Open a event queue for the symbol
-        self.events = SortedDict()
 
         # Add all the TOB Updates to the queue
         for i in tob_updates[1:]:
@@ -420,6 +436,10 @@ class TOB_Exchange(Exchange):
         # If the event is a cancellation, cancel the order
         elif type(event) == CancelOrder:
             self._execute_cancellation(event)
+
+        # If the event is a public trade, check if it would lead to execution
+        elif type(event) == Trade:
+            pass
 
         # Remove the event timestamp if there are no more in the queue at that time
         if len(self.events.peekitem(0)[1]) == 0:

@@ -3,8 +3,7 @@
 
 ## TOB Exchange
 
-This exchange implementation takes TOB updates and feeds them into a event queue. 
-
+This exchange implementation takes TOB updates and feeds them into a event queue. This event queue is the heart of the system and consists of all relevant updates that can happen, such as `Trade, Order, Modification, Cancel`. These events are either preloaded or user generated as a reaction to a market environemt. See the picture below for more information.
 
 Possible interractions: 
 - `market_order(symbol, amount, side, timestamp)`

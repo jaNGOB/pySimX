@@ -21,7 +21,12 @@ from .data_types import TOB, Order, Trade, ModifyOrder
 
 
 class Exchange:
-    def __init__(self, fees: List[int] = [0, 2]):
+    def __init__(self, fees: List[int] = [0, 2]) -> None:
+        """
+
+        :param fees: (List[int]) a list containing two values for maker and taker fees expressed in basispoints.
+        """
+        # Load the fees and transform them from basis-points into percent
         self.maker_fee = fees[0] / 10_000
         self.taker_fee = fees[1] / 10_000
         self.balance = {}
@@ -88,12 +93,14 @@ class Exchange:
 
         # Balance update as described above
         self.balance[self.market_mapping[order.symbol][0]] += order.amount * (
-            order.side * 2 - 1
+            (order.side * 2) - 1
         )
+
         self.balance[self.market_mapping[order.symbol][1]] -= (
             order.amount * order.price
             + abs(order.amount * order.price * self.taker_fee)
-        ) * (order.side * 2 - 1)
+        ) * ((order.side * 2) - 1)
+
         # self.positions[order.symbol] = order.amount
 
         self.trades.append(new_trade)
@@ -137,7 +144,7 @@ class TOB_Exchange(Exchange):
             "bid_quantity": update.bq,
             "bid_price": update.bp,
             "ask_price": update.ap,
-            "ask_quantity": update.ap,
+            "ask_quantity": update.aq,
         }
         return out
 

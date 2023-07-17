@@ -11,6 +11,7 @@ Here we define the exchange object. Within it, we have the logic for:
 TODO: 
 - Add Futures support
 - Communication on confirmations, etc. 
+- Double check Dict sides
 
 """
 from typing import List, Literal, Optional
@@ -379,13 +380,27 @@ class TOB_Exchange(Exchange):
             self.open_position(order=event, timestamp=event.entryTime)
 
     def _check_match_trades(self, trade: Trade, timestamp: float) -> None:
+        """
+        Function that 'executes' a trade and checks if there is an open order of the user which would be hit.
+
+        :param trade: (Trade) trade that the public executed
+        :param timestamp: (float) Timestamp
+
+        :return: None
+        """
+        # if the public trade is a buy and we have an open sell order, go through the sell orders
+        # and see if one would have gotten hit by it.
+        # public_price >= open_order
         if (trade.side == 1) and len(self.open_orders[trade.symbol][0]) > 0:
-            if self.open_orders[trade.symbol][0].peekitem(0)[1].price < trade.price:
+            if self.open_orders[trade.symbol][0].peekitem(0)[1].price <= trade.price:
+                # We have a match, pop the order out of the open orders and open the position
                 order = self.open_orders[trade.symbol][0].popitem(0)
                 self.open_position(order=order[1], timestamp=timestamp)
 
+        # else check if we have a open buy order and the public trade was a sell.
         elif (trade.side == 0) and len(self.open_orders[trade.symbol][1]) > 0:
-            if self.open_orders[trade.symbol][0].peekitem(0)[1].price < trade.price:
+            if self.open_orders[trade.symbol][0].peekitem(0)[1].price >= trade.price:
+                # We have a match, pop the order out of the open orders and open the position
                 order = self.open_orders[trade.symbol][0].popitem(0)
                 self.open_position(order=order[1], timestamp=timestamp)
 

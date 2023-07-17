@@ -25,7 +25,7 @@ datasets.download(
     ],
     from_date=start,
     to_date=end,
-    download_dir="./data_loader/datasets",
+    download_dir="datasets",
     symbols=["COMPBTC"],
     # api_key="YOUR API KEY (optionally)",
 )

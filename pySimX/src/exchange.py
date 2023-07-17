@@ -392,6 +392,7 @@ class TOB_Exchange(Exchange):
         # and see if one would have gotten hit by it.
         # public_price >= open_order
         if (trade.side == 1) and len(self.open_orders[trade.symbol][0]) > 0:
+            # check the lowest value (0) in our open orders and see if its below the buy order price
             if self.open_orders[trade.symbol][0].peekitem(0)[1].price <= trade.price:
                 # We have a match, pop the order out of the open orders and open the position
                 order = self.open_orders[trade.symbol][0].popitem(0)
@@ -399,9 +400,10 @@ class TOB_Exchange(Exchange):
 
         # else check if we have a open buy order and the public trade was a sell.
         elif (trade.side == 0) and len(self.open_orders[trade.symbol][1]) > 0:
-            if self.open_orders[trade.symbol][0].peekitem(0)[1].price >= trade.price:
+            # check the last value in the SortedDict (-1) which will be the highest buy price and look for a match
+            if self.open_orders[trade.symbol][1].peekitem(-1)[1].price >= trade.price:
                 # We have a match, pop the order out of the open orders and open the position
-                order = self.open_orders[trade.symbol][0].popitem(0)
+                order = self.open_orders[trade.symbol][1].popitem(-1)
                 self.open_position(order=order[1], timestamp=timestamp)
 
     def _check_match(self, symbol: str, timestamp: int):

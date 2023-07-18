@@ -315,10 +315,13 @@ class TOB_Exchange(Exchange):
                 o.amount = order.new_amount
 
     def _execute_cancellation(self, order: CancelOrder):
-        cancelled_order = order.order
-        self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
-            cancelled_order.price
-        )
+        try:
+            cancelled_order = order.order
+            self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
+                cancelled_order.price
+            )
+        except Exception as e:
+            print("Cancellation failed", order)
 
     def cancel_order(self, order: Order) -> None:
         timestamp = self._add_latency(self.markets[order.symbol].timestamp)

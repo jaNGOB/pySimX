@@ -99,9 +99,10 @@ class Exchange:
             (order.side * 2) - 1
         )
 
+        fee = self.taker_fee if order.taker else self.maker_fee
+
         self.balance[self.market_mapping[order.symbol][1]] -= (
-            order.amount * order.price
-            + abs(order.amount * order.price * self.taker_fee)
+            order.amount * order.price + abs(order.amount * order.price * fee)
         ) * ((order.side * 2) - 1)
 
         # self.positions[order.symbol] = order.amount

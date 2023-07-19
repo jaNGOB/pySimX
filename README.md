@@ -14,7 +14,7 @@ A few examples are provided:
 - [Cross-ex arbitrage](https://github.com/jaNGOB/pySimX/blob/main/pySimX/examples/upbit_strat.ipynb): Replicate a book on a second exchange and hedge with a market order after the resting orders are hit on the origin.
 
 ## Contributing
-We appreciate all contributions. Please read our contributing guidelines before submitting a pull request.
+We appreciate all contributions.
 
 ## License
 SimX is open-source software licensed under the MIT license.

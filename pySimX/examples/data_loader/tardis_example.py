@@ -14,7 +14,7 @@ start = f"{n.year}-{n.month:02d}-01"
 end = f"{n.year}-{n.month:02d}-02"
 
 datasets.download(
-    exchange="binance",
+    exchange="upbit",
     data_types=[
         # "incremental_book_L2",
         "trades",
@@ -26,6 +26,6 @@ datasets.download(
     from_date=start,
     to_date=end,
     download_dir="datasets",
-    symbols=["COMPBTC"],
+    symbols=["USDT-BTC"]  # ["BTCUSDT"],
     # api_key="YOUR API KEY (optionally)",
 )

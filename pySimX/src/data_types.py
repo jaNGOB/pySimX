@@ -72,5 +72,6 @@ class Trade:
     taker: bool
     amount: float
     price: float
+    fees: float
     entryTime: int
     eventTime: int

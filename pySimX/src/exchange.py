@@ -80,32 +80,36 @@ class Exchange:
         Buy 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (1 * 2 -1) = 3'000 * 1 = 3'000
         Sell 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (0 * 2 -1) = 3'000 * -1 = -3'000
         """
-        new_trade = Trade(
-            order.symbol,
-            order.order_id,
-            order.side,
-            order.taker,
-            order.amount,
-            order.price,
-            order.entryTime,
-            timestamp,
-        )
-        print("Trade Executed", new_trade)
-
-        order.eventTime = timestamp
 
         # Balance update as described above
         self.balance[self.market_map[order.symbol][0]] += order.amount * (
             (order.side * 2) - 1
         )
 
+        # define the fee that will be used for the trade
         fee = self.taker_fee if order.taker else self.maker_fee
 
+        fee_quote = abs(order.amount * order.price * fee)
+
+        # Update the balances
         self.balance[self.market_map[order.symbol][1]] -= (
-            order.amount * order.price + abs(order.amount * order.price * fee)
+            order.amount * order.price + fee_quote
         ) * ((order.side * 2) - 1)
 
         # self.positions[order.symbol] = order.amount
+
+        new_trade = Trade(
+            symbol=order.symbol,
+            order_id=order.order_id,
+            side=order.side,
+            taker=order.taker,
+            amount=order.amount,
+            price=order.price,
+            fees=fee_quote,
+            entryTime=order.entryTime,
+            eventTime=timestamp,
+        )
+        print("Trade Executed", new_trade)
 
         self.trades.append(new_trade)
 
@@ -282,52 +286,6 @@ class TOB_Exchange(Exchange):
             )
         )
 
-    def _check_balance(self, order):
-        """
-        Sanity check that we have enough balance to execute such an order before we even place it.
-        """
-        # If it is a buy, check that we have enough quote currency available to buy the base
-        if order.side:
-            if (
-                self.balance[self.market_map[order.symbol][1]]
-                < order.amount * order.price
-            ):
-                return False
-        # else, check that we have enough base to sell it
-        else:
-            if self.balance[self.market_map[order.symbol][0]] < order.amount:
-                return False
-
-        return True
-
-    def _execute_modification(self, order: ModifyOrder) -> None:
-        """
-        function that finds the order by the order_id and replaces it by the new that is sent.
-        The order_id is not updated so we can just look for it directly.
-
-        :param order: (Order)
-        """
-        orders = self.open_orders[order.symbol][order.side]
-
-        # look for a match and update the new price and amounts
-        for o in orders:
-            if o.order_id == order.order_id:
-                o.price = order.new_price
-                o.amount = order.new_amount
-
-    def _execute_cancellation(self, order: CancelOrder):
-        """
-        Actually cancel the order now that was in the queue. Since this order can also be executed in the meantime,
-        we have to do a try:except.
-        """
-        try:
-            cancelled_order = order.order
-            self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
-                cancelled_order.price
-            )
-        except Exception as e:
-            print("Cancellation failed", order)
-
     def cancel_order(self, order: Order) -> None:
         """
         Fuction that will cancel an order. The trader has to provide the Order.
@@ -380,7 +338,53 @@ class TOB_Exchange(Exchange):
 
         self.events[timestamp].append(new_order)
 
-    def _execute_market(self, event: Order) -> None:
+    def _check_balance(self, order):
+        """
+        Sanity check that we have enough balance to execute such an order before we even place it.
+        """
+        # If it is a buy, check that we have enough quote currency available to buy the base
+        if order.side:
+            if (
+                self.balance[self.market_map[order.symbol][1]]
+                < order.amount * order.price
+            ):
+                return False
+        # else, check that we have enough base to sell it
+        else:
+            if self.balance[self.market_map[order.symbol][0]] < order.amount:
+                return False
+
+        return True
+
+    def _execute_modification(self, order: ModifyOrder) -> None:
+        """
+        function that finds the order by the order_id and replaces it by the new that is sent.
+        The order_id is not updated so we can just look for it directly.
+
+        :param order: (Order)
+        """
+        orders = self.open_orders[order.symbol][order.side]
+
+        # look for a match and update the new price and amounts
+        for o in orders:
+            if o.order_id == order.order_id:
+                o.price = order.new_price
+                o.amount = order.new_amount
+
+    def _execute_cancellation(self, order: CancelOrder):
+        """
+        Actually cancel the order now that was in the queue. Since this order can also be executed in the meantime,
+        we have to do a try:except.
+        """
+        try:
+            cancelled_order = order.order
+            self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
+                cancelled_order.price
+            )
+        except Exception as e:
+            print("Cancellation failed", order)
+
+    def _execute_market(self, event: Order, timestamp: float) -> None:
         # We chose the Ask Price if we buy, the Bid Price if we sell
         price = (
             self.markets[event.symbol].ap
@@ -394,7 +398,7 @@ class TOB_Exchange(Exchange):
         # Double check that we have enough balance available to execute the order
         if self._check_balance(event):
             # Open the position if the balance is okay
-            self.open_position(order=event, timestamp=event.entryTime)
+            self.open_position(order=event, timestamp=timestamp)
 
     def _check_match_trades(self, trade: Trade, timestamp: float) -> None:
         """
@@ -479,7 +483,7 @@ class TOB_Exchange(Exchange):
         elif type(event) == Order:
             # If its a market order, execute directly
             if event.taker:
-                self._execute_market(event)
+                self._execute_market(event, ts)
             # If its a limit order, put it into the open orders that wait for execution
             else:
                 check = self._check_balance(event)
@@ -507,9 +511,9 @@ class TOB_Exchange(Exchange):
         self._check_match(event.symbol, ts)
         # self.overview(event.symbol)
 
-    def run_simulation(self, strategy):
-        strat = strategy()
+    def run_simulation(self, strategy, symbol):
+        strat = strategy(symbol)
         while len(self.events) > 0:
             strat.run_strategy()
             self._simulation_step()
-            self._update_balance("COMPBTC")
+            self._update_balance(symbol)

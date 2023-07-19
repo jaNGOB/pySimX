@@ -316,6 +316,10 @@ class TOB_Exchange(Exchange):
                 o.amount = order.new_amount
 
     def _execute_cancellation(self, order: CancelOrder):
+        """
+        Actually cancel the order now that was in the queue. Since this order can also be executed in the meantime,
+        we have to do a try:except.
+        """
         try:
             cancelled_order = order.order
             self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
@@ -325,10 +329,19 @@ class TOB_Exchange(Exchange):
             print("Cancellation failed", order)
 
     def cancel_order(self, order: Order) -> None:
+        """
+        Fuction that will cancel an order. The trader has to provide the Order.
+
+        :param order: (Order)
+
+        :return: None
+        """
+        # Add latency simulation
         timestamp = self._add_latency(self.markets[order.symbol].timestamp)
         if timestamp not in self.events.keys():
             self.events[timestamp] = deque()
 
+        # Append the CancelOrder
         self.events[timestamp].append(CancelOrder(symbol=order.symbol, order=order))
 
     def modify_order(

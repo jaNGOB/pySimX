@@ -34,7 +34,7 @@ class Exchange:
         self.balance = {}
 
         self.markets = {}
-        self.market_mapping = {}
+        self.market_map = {}
 
         self.positions = {}
         self.open_orders = {}
@@ -43,7 +43,7 @@ class Exchange:
         self.historical_balance = []
 
     def add_market(self, symbol: str, base: str, quote: str):
-        self.market_mapping[symbol] = [base, quote]
+        self.market_map[symbol] = [base, quote]
 
     def add_balance(self, symbol: str, amount: float):
         self.balance[symbol] = amount
@@ -95,13 +95,13 @@ class Exchange:
         order.eventTime = timestamp
 
         # Balance update as described above
-        self.balance[self.market_mapping[order.symbol][0]] += order.amount * (
+        self.balance[self.market_map[order.symbol][0]] += order.amount * (
             (order.side * 2) - 1
         )
 
         fee = self.taker_fee if order.taker else self.maker_fee
 
-        self.balance[self.market_mapping[order.symbol][1]] -= (
+        self.balance[self.market_map[order.symbol][1]] -= (
             order.amount * order.price + abs(order.amount * order.price * fee)
         ) * ((order.side * 2) - 1)
 
@@ -289,13 +289,13 @@ class TOB_Exchange(Exchange):
         # If it is a buy, check that we have enough quote currency available to buy the base
         if order.side:
             if (
-                self.balance[self.market_mapping[order.symbol][1]]
+                self.balance[self.market_map[order.symbol][1]]
                 < order.amount * order.price
             ):
                 return False
         # else, check that we have enough base to sell it
         else:
-            if self.balance[self.market_mapping[order.symbol][0]] < order.amount:
+            if self.balance[self.market_map[order.symbol][0]] < order.amount:
                 return False
 
         return True

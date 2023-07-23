@@ -22,6 +22,17 @@ from .matching_engine import OrderBook
 from .data_types import TOB, Order, Trade, ModifyOrder, CancelOrder
 
 
+# Setup logging to console
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+
 class Exchange:
     def __init__(self, fees: List[int] = [0, 2]) -> None:
         """
@@ -51,7 +62,7 @@ class Exchange:
     def top_of_book(self, symbol):
         tb = self.markets[symbol].bp
         ta = self.markets[symbol].ap
-        print(f"Bid: {tb} | {ta} :Ask")
+        logger.info(f"Bid: {tb} | {ta} :Ask")
         return [tb, ta]
 
     def _update_balance(self, symbol):
@@ -109,12 +120,12 @@ class Exchange:
             entryTime=order.entryTime,
             eventTime=timestamp,
         )
-        print("Trade Executed", new_trade)
+        logger.info(f"Trade Executed {new_trade}")
 
         self.trades.append(new_trade)
 
     def close_position(self, symbol: str, price: float):
-        print("Position Closed")
+        logger.info("Position Closed")
         self.balance += self.positions[symbol] * price - abs(
             self.positions[symbol] * price * self.taker_fee
         )
@@ -167,17 +178,20 @@ class TOB_Exchange(Exchange):
         return out
 
     def overview(self, symbol: str) -> None:
-        print(f"Bid: {self.markets[symbol].bp:>8} | {self.markets[symbol].ap:>8} :Ask")
+        logger.info(
+            f"Bid: {self.markets[symbol].bp:>8} | {self.markets[symbol].ap:>8} :Ask"
+        )
 
-        print("Open Buy Orders")
+        logger.info("Open Buy Orders")
         for i in self.open_orders["COMPBTC"][1]:
-            print(f"{i} @ {self.open_orders['COMPBTC'][1][i].amount}")
+            logger.info(f"{i} @ {self.open_orders['COMPBTC'][1][i].amount}")
 
-        print("Open Sell Orders")
+        logger.info("Open Sell Orders")
         for i in self.open_orders["COMPBTC"][0]:
-            print(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
+            logger.info(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
 
     def load_trades(self, trades: List[float], symbol: str) -> None:
+        logger.info(f"Loading {len(trades)} trades for {symbol}")
         # Iterate through the trades that need to be added to the events
         for i in trades:
             # make sure the event has a queue at a given timestamp
@@ -200,7 +214,10 @@ class TOB_Exchange(Exchange):
                 )
             )
 
+        logger.info(f"Trades loaded successfully")
+
     def load_tob(self, tob_updates: List[float], symbol: str) -> None:
+        logger.info(f"Loading {len(tob_updates)} TOB-Updates for {symbol}")
         # Initialize a orders queue
         self.open_orders[symbol] = {}
         self.open_orders[symbol][1] = SortedDict()
@@ -222,6 +239,7 @@ class TOB_Exchange(Exchange):
             self.events[i[0]].append(
                 TOB(symbol=symbol, timestamp=i[0], bq=i[1], bp=i[2], ap=i[3], aq=i[4])
             )
+        logger.info(f"TOB-Updates loaded successfully")
 
     def market_order(
         self, symbol: str, amount: float, side: bool, timestamp: int
@@ -348,10 +366,16 @@ class TOB_Exchange(Exchange):
                 self.balance[self.market_map[order.symbol][1]]
                 < order.amount * order.price
             ):
+                logger.warn(
+                    f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balance[self.market_map[order.symbol][1]]}"
+                )
                 return False
         # else, check that we have enough base to sell it
         else:
             if self.balance[self.market_map[order.symbol][0]] < order.amount:
+                logger.warn(
+                    f"Sell Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount}, Available Amount: {self.balance[self.market_map[order.symbol][0]]}"
+                )
                 return False
 
         return True
@@ -382,7 +406,7 @@ class TOB_Exchange(Exchange):
                 cancelled_order.price
             )
         except Exception as e:
-            print("Cancellation failed", order)
+            logger.warn(f"Cancellation failed, order {order} not open")
 
     def _execute_market(self, event: Order, timestamp: float) -> None:
         # We chose the Ask Price if we buy, the Bid Price if we sell
@@ -416,16 +440,18 @@ class TOB_Exchange(Exchange):
             # check the lowest value (0) in our open orders and see if its below the buy order price
             if self.open_orders[trade.symbol][0].peekitem(0)[1].price <= trade.price:
                 # We have a match, pop the order out of the open orders and open the position
-                order = self.open_orders[trade.symbol][0].popitem(0)
-                self.open_position(order=order[1], timestamp=timestamp)
+                order = self.open_orders[trade.symbol][0].popitem(0)[1]
+                logger.info(f"Trade match found! Order {order} will be opened")
+                self.open_position(order=order, timestamp=timestamp)
 
         # else check if we have a open buy order and the public trade was a sell.
         elif (trade.side == 0) and len(self.open_orders[trade.symbol][1]) > 0:
             # check the last value in the SortedDict (-1) which will be the highest buy price and look for a match
             if self.open_orders[trade.symbol][1].peekitem(-1)[1].price >= trade.price:
                 # We have a match, pop the order out of the open orders and open the position
-                order = self.open_orders[trade.symbol][1].popitem(-1)
-                self.open_position(order=order[1], timestamp=timestamp)
+                order = self.open_orders[trade.symbol][1].popitem(-1)[1]
+                logger.info(f"Trade match found! Order {order} will be opened")
+                self.open_position(order=order, timestamp=timestamp)
 
     def _check_match(self, symbol: str, timestamp: int):
         # If there is a buy order and the price is above the current ask price, we execute it
@@ -434,12 +460,14 @@ class TOB_Exchange(Exchange):
                 self.markets[symbol].ap
                 <= self.open_orders[symbol][1].peekitem(-1)[1].price
             ):
-                order = self.open_orders[symbol][1].popitem(0)
+                order = self.open_orders[symbol][1].popitem(0)[1]
                 # If the price moved in the meantime which leads to direct execution, it was a taker
                 if order[1].entryTime == timestamp:
                     order[1].taker = True
 
-                self.open_position(order=order[1], timestamp=timestamp)
+                self.open_position(order=order, timestamp=timestamp)
+
+                logger.info(f"TOB match found! Order {order} will be opened")
 
                 if len(self.open_orders[symbol][1]) == 0:
                     break
@@ -450,12 +478,14 @@ class TOB_Exchange(Exchange):
                 self.markets[symbol].bp
                 >= self.open_orders[symbol][0].peekitem(0)[1].price
             ):
-                order = self.open_orders[symbol][0].popitem(-1)
+                order = self.open_orders[symbol][0].popitem(-1)[1]
                 # If the price moved in the meantime which leads to direct execution, it was a taker
                 if order[1].entryTime == timestamp:
                     order[1].taker = True
 
-                self.open_position(order=order[1], timestamp=timestamp)
+                self.open_position(order=order, timestamp=timestamp)
+
+                logger.info(f"TOB match found! Order {order} will be opened")
 
                 if len(self.open_orders[symbol][0]) == 0:
                     break

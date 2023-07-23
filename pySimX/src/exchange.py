@@ -19,6 +19,7 @@ from collections import deque
 from sortedcontainers import SortedDict
 from .matching_engine import OrderBook
 from .data_types import TOB, Order, Trade, ModifyOrder, CancelOrder
+from .latency_models import LogNormalLatency, ConstantLatency
 
 # from .analytics import PostTrade
 
@@ -150,7 +151,11 @@ class TickExchange(Exchange):
 
 
 class TOB_Exchange(Exchange):
-    def __init__(self, fees: List[int] = [0, 2], latency=[2000, 0.2]):
+    def __init__(
+        self,
+        fees: List[int] = [0, 2],
+        latency: LogNormalLatency = LogNormalLatency(mean=5000, sigma=0.3),
+    ):
         """
         Initialize the TOB Exchange.
 
@@ -161,14 +166,14 @@ class TOB_Exchange(Exchange):
         super().__init__(fees)
 
         # Define latency summary metrics
-        self.latency_mean = latency[0]
-        self.latency_dev = latency[1]
+        self.latency = latency
 
         # Open a event queue for the symbol
         self.events = SortedDict()
 
     def _add_latency(self, timestamp: float) -> float:
-        timestamp += np.random.lognormal(0, self.latency_dev, 1)[0] * self.latency_mean
+        # timestamp += np.random.lognormal(0, self.latency_dev, 1)[0] * self.latency_mean
+        timestamp += self.latency.estimate()
         return timestamp
 
     def fetch_tob(self, symbol) -> dict[float]:
@@ -476,8 +481,8 @@ class TOB_Exchange(Exchange):
             ):
                 order = self.open_orders[symbol][1].popitem(0)[1]
                 # If the price moved in the meantime which leads to direct execution, it was a taker
-                if order[1].entryTime == timestamp:
-                    order[1].taker = True
+                if order.entryTime == timestamp:
+                    order.taker = True
 
                 self.open_position(order=order, timestamp=timestamp)
 
@@ -494,8 +499,8 @@ class TOB_Exchange(Exchange):
             ):
                 order = self.open_orders[symbol][0].popitem(-1)[1]
                 # If the price moved in the meantime which leads to direct execution, it was a taker
-                if order[1].entryTime == timestamp:
-                    order[1].taker = True
+                if order.entryTime == timestamp:
+                    order.taker = True
 
                 self.open_position(order=order, timestamp=timestamp)
 

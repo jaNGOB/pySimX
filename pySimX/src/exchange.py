@@ -11,7 +11,6 @@ Here we define the exchange object. Within it, we have the logic for:
 TODO: 
 - Add Futures support
 - Communication on confirmations, etc. 
-- Double check Dict sides
 
 """
 from typing import List, Literal, Optional
@@ -68,9 +67,9 @@ class Exchange:
         logger.info(f"Bid: {tb} | {ta} :Ask")
         return [tb, ta]
 
-    def _update_balance(self, symbol):
+    def _update_balance(self, symbol: str) -> None:
         update = self.balance.copy()
-        update["mid"] = (
+        update[symbol + "_mid"] = (
             self.markets[symbol].ap.copy() + self.markets[symbol].bp.copy()
         ) / 2
         update["ts"] = self.markets[symbol].timestamp
@@ -168,7 +167,7 @@ class TOB_Exchange(Exchange):
         # Open a event queue for the symbol
         self.events = SortedDict()
 
-    def _add_latency(self, timestamp: int):
+    def _add_latency(self, timestamp: float) -> float:
         timestamp += np.random.lognormal(0, self.latency_dev, 1)[0] * self.latency_mean
         return timestamp
 
@@ -334,7 +333,7 @@ class TOB_Exchange(Exchange):
         order: Order,
         price: Optional[float] = None,
         amount: Optional[float] = None,
-    ):
+    ) -> None:
         """
         To modify an order, we first open a modification message and assign it.
         Next we check if we received instructions to change the price or amount and add the information where necessary
@@ -365,7 +364,7 @@ class TOB_Exchange(Exchange):
 
         self.events[timestamp].append(new_order)
 
-    def _check_balance(self, order):
+    def _check_balance(self, order: Order) -> bool:
         """
         Sanity check that we have enough balance to execute such an order before we even place it.
         """
@@ -404,7 +403,7 @@ class TOB_Exchange(Exchange):
                 o.price = order.new_price
                 o.amount = order.new_amount
 
-    def _execute_cancellation(self, order: CancelOrder):
+    def _execute_cancellation(self, order: CancelOrder) -> None:
         """
         Actually cancel the order now that was in the queue. Since this order can also be executed in the meantime,
         we have to do a try:except.
@@ -468,7 +467,7 @@ class TOB_Exchange(Exchange):
                 logger.info(f"Trade match found! Order {order} will be opened")
                 self.open_position(order=order, timestamp=timestamp)
 
-    def _check_match(self, symbol: str, timestamp: int):
+    def _check_match(self, symbol: str, timestamp: float) -> None:
         # If there is a buy order and the price is above the current ask price, we execute it
         if len(self.open_orders[symbol][1]) > 0:
             while (
@@ -505,7 +504,7 @@ class TOB_Exchange(Exchange):
                 if len(self.open_orders[symbol][0]) == 0:
                     break
 
-    def _simulation_step(self):
+    def _simulation_step(self) -> None:
         # Select the current event and remove it from the Queue
         ts = self.events.peekitem(0)[0]
         event = self.events.peekitem(0)[1].popleft()
@@ -556,8 +555,8 @@ class TOB_Exchange(Exchange):
         self._check_match(event.symbol, ts)
         # self.overview(event.symbol)
 
-    def run_analytics(self):
-        analytics = PostTrade(self.trades)
+    # def run_analytics(self):
+    #     analytics = PostTrade(self.trades)
 
     def run_simulation(self, strategy, symbol):
         strat = strategy(symbol)

@@ -5,7 +5,7 @@ from enum import Enum
 from collections import OrderedDict
 
 
-OrderStatus = Enum("OrderStatus", ["open", "filled", "partially_filled"])
+OrderStatus = Enum("OrderStatus", ["open", "filled", "partially_filled", "cancelled"])
 
 
 # TOB

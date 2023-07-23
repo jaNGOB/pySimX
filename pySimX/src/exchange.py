@@ -21,6 +21,8 @@ from sortedcontainers import SortedDict
 from .matching_engine import OrderBook
 from .data_types import TOB, Order, Trade, ModifyOrder, CancelOrder
 
+# from .analytics import PostTrade
+
 
 # Setup logging to console
 import logging
@@ -50,6 +52,7 @@ class Exchange:
         self.positions = {}
         self.open_orders = {}
         self.trades = []
+        self.orders = []
 
         self.historical_balance = []
 
@@ -92,6 +95,8 @@ class Exchange:
         Sell 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (0 * 2 -1) = 3'000 * -1 = -3'000
         """
 
+        order.status = "filled"
+
         # Balance update as described above
         self.balance[self.market_map[order.symbol][0]] += order.amount * (
             (order.side * 2) - 1
@@ -123,6 +128,7 @@ class Exchange:
         logger.info(f"Trade Executed {new_trade}")
 
         self.trades.append(new_trade)
+        self.orders.append(order)
 
     def close_position(self, symbol: str, price: float):
         logger.info("Position Closed")
@@ -209,6 +215,7 @@ class TOB_Exchange(Exchange):
                     taker=True,
                     amount=i[4],
                     price=i[3],
+                    fees=0,
                     entryTime=i[0],
                     eventTime=i[0],
                 )
@@ -242,7 +249,7 @@ class TOB_Exchange(Exchange):
         logger.info(f"TOB-Updates loaded successfully")
 
     def market_order(
-        self, symbol: str, amount: float, side: bool, timestamp: int
+        self, symbol: str, amount: float, side: bool, local_timestamp: int
     ) -> None:
         """
 
@@ -253,7 +260,7 @@ class TOB_Exchange(Exchange):
         :return: None
         """
         # Add latency to the timestamp of the last TOB update
-        timestamp = self._add_latency(timestamp)
+        timestamp = self._add_latency(local_timestamp)
 
         # If there is already an event in the queue at that time, add it at the end
         if timestamp not in self.events.keys():
@@ -266,12 +273,13 @@ class TOB_Exchange(Exchange):
                 taker=True,
                 price=None,
                 amount=amount,
-                entryTime=timestamp,
+                entryTime=local_timestamp,
+                eventTime=timestamp,
             )
         )
 
     def limit_order(
-        self, symbol: str, amount: float, price: float, side: bool, timestamp: int
+        self, symbol: str, amount: float, price: float, side: bool, local_timestamp: int
     ) -> None:
         """
         Function that adds an order to the events queue. First there is some added
@@ -287,7 +295,7 @@ class TOB_Exchange(Exchange):
         :return: None
         """
         # Add latency to the timestamp of the last TOB update
-        timestamp = self._add_latency(timestamp)
+        timestamp = self._add_latency(local_timestamp)
 
         # If there is already an event in the queue at that time, add it at the end
         if timestamp not in self.events.keys():
@@ -300,7 +308,8 @@ class TOB_Exchange(Exchange):
                 taker=False,
                 amount=amount,
                 price=price,
-                entryTime=timestamp,
+                entryTime=local_timestamp,
+                eventTime=timestamp,
             )
         )
 
@@ -402,9 +411,15 @@ class TOB_Exchange(Exchange):
         """
         try:
             cancelled_order = order.order
+
+            cancelled_order.status = "cancelled_order"
+
             self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
                 cancelled_order.price
             )
+
+            self.orders.append(cancelled_order)
+
         except Exception as e:
             logger.warn(f"Cancellation failed, order {order} not open")
 
@@ -540,6 +555,9 @@ class TOB_Exchange(Exchange):
         # event.symbol exists in all possible updates so we can safely call it
         self._check_match(event.symbol, ts)
         # self.overview(event.symbol)
+
+    def run_analytics(self):
+        analytics = PostTrade(self.trades)
 
     def run_simulation(self, strategy, symbol):
         strat = strategy(symbol)

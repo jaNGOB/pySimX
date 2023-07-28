@@ -44,6 +44,7 @@ class Exchange:
         # Load the fees and transform them from basis-points into percent
         self.maker_fee = fees[0] / 10_000
         self.taker_fee = fees[1] / 10_000
+
         self.balance = {}
 
         self.markets = {}
@@ -167,6 +168,8 @@ class TOB_Exchange(Exchange):
 
         # Define latency summary metrics
         self.latency = latency
+
+        self.last_timestamp = None
 
         # Open a event queue for the symbol
         self.events = SortedDict()
@@ -558,6 +561,7 @@ class TOB_Exchange(Exchange):
         # Finally, check for a match in the current pair
         # event.symbol exists in all possible updates so we can safely call it
         self._check_match(event.symbol, ts)
+        self.last_timestamp = ts
         # self.overview(event.symbol)
 
     # def run_analytics(self):

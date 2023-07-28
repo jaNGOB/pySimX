@@ -34,15 +34,23 @@ class mean:
 
 
 class var:
-    def __init__(self, lookback_us: int) -> None:
+    def __init__(self, lookback_us: int, calculate_ema: bool = False) -> None:
         self.lookback_us = lookback_us
         self.last_ts = 0
         self.var = 1
 
+        self.ema = mean(lookback_us)
+
     def __repr__(self) -> str:
         return self.var
 
-    def update(self, x_t: float, ema: float, ts: int) -> float:
+    def _update_ema(self, x_t: float, ts: int) -> float:
+        current_ema = self.ema.update(x_t, ts)
+        return current_ema
+
+    def update(self, x_t: float, ts: int, ema: float = None) -> float:
+        ema = self._update_ema(x_t, ts)
+
         weight = min((ts - self.last_ts) / self.lookback_us, 1)
 
         self.var = weight * (x_t - ema) ** 2 + (1 - weight) * self.var

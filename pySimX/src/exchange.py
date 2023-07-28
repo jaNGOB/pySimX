@@ -45,7 +45,7 @@ class Exchange:
         self.maker_fee = fees[0] / 10_000
         self.taker_fee = fees[1] / 10_000
 
-        self.balance = {}
+        self.balances = {}
 
         self.markets = {}
         self.market_map = {}
@@ -61,7 +61,7 @@ class Exchange:
         self.market_map[symbol] = [base, quote]
 
     def add_balance(self, symbol: str, amount: float):
-        self.balance[symbol] = amount
+        self.balances[symbol] = amount
 
     def top_of_book(self, symbol):
         tb = self.markets[symbol].bp
@@ -70,7 +70,7 @@ class Exchange:
         return [tb, ta]
 
     def _update_balance(self, symbol: str) -> None:
-        update = self.balance.copy()
+        update = self.balances.copy()
         update[symbol + "_mid"] = (
             self.markets[symbol].ap.copy() + self.markets[symbol].bp.copy()
         ) / 2
@@ -99,7 +99,7 @@ class Exchange:
         order.status = "filled"
 
         # Balance update as described above
-        self.balance[self.market_map[order.symbol][0]] += order.amount * (
+        self.balances[self.market_map[order.symbol][0]] += order.amount * (
             (order.side * 2) - 1
         )
 
@@ -109,7 +109,7 @@ class Exchange:
         fee_quote = abs(order.amount * order.price * fee)
 
         # Update the balances
-        self.balance[self.market_map[order.symbol][1]] -= (
+        self.balances[self.market_map[order.symbol][1]] -= (
             order.amount * order.price + fee_quote
         ) * ((order.side * 2) - 1)
 
@@ -133,7 +133,7 @@ class Exchange:
 
     def close_position(self, symbol: str, price: float):
         logger.info("Position Closed")
-        self.balance += self.positions[symbol] * price - abs(
+        self.balances += self.positions[symbol] * price - abs(
             self.positions[symbol] * price * self.taker_fee
         )
         self.positions.pop(symbol)
@@ -379,18 +379,18 @@ class TOB_Exchange(Exchange):
         # If it is a buy, check that we have enough quote currency available to buy the base
         if order.side:
             if (
-                self.balance[self.market_map[order.symbol][1]]
+                self.balances[self.market_map[order.symbol][1]]
                 < order.amount * order.price
             ):
                 logger.warn(
-                    f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balance[self.market_map[order.symbol][1]]}"
+                    f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balances[self.market_map[order.symbol][1]]}"
                 )
                 return False
         # else, check that we have enough base to sell it
         else:
-            if self.balance[self.market_map[order.symbol][0]] < order.amount:
+            if self.balances[self.market_map[order.symbol][0]] < order.amount:
                 logger.warn(
-                    f"Sell Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount}, Available Amount: {self.balance[self.market_map[order.symbol][0]]}"
+                    f"Sell Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount}, Available Amount: {self.balances[self.market_map[order.symbol][0]]}"
                 )
                 return False
 

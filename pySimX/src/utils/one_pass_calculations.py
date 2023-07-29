@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Optional
 
 
 class one_pass:
@@ -34,28 +35,54 @@ class mean:
 
 
 class var:
-    def __init__(self, lookback_us: int, calculate_ema: bool = False) -> None:
-        self.lookback_us = lookback_us
+    def __init__(
+        self,
+        lookback: int,
+        calculate_ema: bool = False,
+        calculate_pct_change: bool = False,
+    ) -> None:
+        """
+        Initialize variance calculations.
+
+        :param looback: (int) the maximum historical timewindow that will be taken into account. This value must be based off of the input times (in ms, us, etc.)
+        :param calculate_ema: (bool) if this is True, the object will maintain its own EMA calculation, otherwise the EMA value has to be provided in the update.
+        :param calculate_pct_change: (bool) if this is True, the object will maintain memory of the last value to calculate percentage changes in values.
+        """
+        self.lookback = lookback
         self.last_ts = 0
         self.var = 1
 
         self.calculate_ema = calculate_ema
+        self.calculate_pct_change = calculate_pct_change
+
+        if calculate_pct_change:
+            self.last_value = 0
 
         if calculate_ema:
-            self.ema = mean(lookback_us)
-
-    def __repr__(self) -> str:
-        return self.var
+            self.ema = mean(lookback)
 
     def _update_ema(self, x_t: float, ts: int) -> float:
         current_ema = self.ema.update(x_t, ts)
         return current_ema
 
-    def update(self, x_t: float, ts: int, ema: float = None) -> float:
+    def update(self, x_t: float, ts: int, ema: Optional[float] = None) -> float:
+        # if we have to calculate the pct_change, we will do it first and replace x_t by the change.
+        if self.calculate_pct_change:
+            # quick check if we already have a history. If no, add the current value to history and count it as zero.
+            if self.last_value == 0:
+                self.last_value = x_t
+                x_t = 0
+            else:
+                tmp = x_t
+                x_t = x_t / self.last_value - 1
+                self.last_value = tmp
+
+        # if an ema is maintained in this object, update the ema.
         if self.calculate_ema:
             ema = self._update_ema(x_t, ts)
 
-        weight = min((ts - self.last_ts) / self.lookback_us, 1)
+        # finally calculate the weight as the difference in timestamps
+        weight = min((ts - self.last_ts) / self.lookback, 1)
 
         self.var = weight * (x_t - ema) ** 2 + (1 - weight) * self.var
         self.last_ts = ts

@@ -39,7 +39,10 @@ class var:
         self.last_ts = 0
         self.var = 1
 
-        self.ema = mean(lookback_us)
+        self.calculate_ema = calculate_ema
+
+        if calculate_ema:
+            self.ema = mean(lookback_us)
 
     def __repr__(self) -> str:
         return self.var
@@ -49,7 +52,8 @@ class var:
         return current_ema
 
     def update(self, x_t: float, ts: int, ema: float = None) -> float:
-        ema = self._update_ema(x_t, ts)
+        if self.calculate_ema:
+            ema = self._update_ema(x_t, ts)
 
         weight = min((ts - self.last_ts) / self.lookback_us, 1)
 

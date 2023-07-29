@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 
 OrderStatus = Enum("OrderStatus", ["open", "filled", "partially_filled", "cancelled"])
+ExchangeType = Enum("ExchangeType", ["future", "spot"])
 
 
 # TOB

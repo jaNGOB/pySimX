@@ -11,14 +11,14 @@ Here we define the exchange object. Within it, we have the logic for:
 TODO: 
 - Add Futures support
 - Communication on confirmations, etc. 
-
 """
+
 from typing import List, Literal, Optional
 import numpy as np
 from collections import deque
 from sortedcontainers import SortedDict
 from .matching_engine import OrderBook
-from .data_types import TOB, Order, Trade, ModifyOrder, CancelOrder
+from .data_types import TOB, Order, Trade, ModifyOrder, CancelOrder, ExchangeType
 from .latency_models import LogNormalLatency, ConstantLatency
 
 # from .analytics import PostTrade
@@ -36,7 +36,9 @@ logger.addHandler(handler)
 
 
 class Exchange:
-    def __init__(self, fees: List[int] = [0, 2]) -> None:
+    def __init__(
+        self, fees: List[int] = [0, 2], exchange_type: ExchangeType = "spot"
+    ) -> None:
         """
 
         :param fees: (List[int]) a list containing two values for maker and taker fees expressed in basispoints.
@@ -50,15 +52,35 @@ class Exchange:
         self.markets = {}
         self.market_map = {}
 
-        self.positions = {}
+        self.exchange_type = exchange_type
+        # If it is a futures / perpetual exchange, we work with the concept of positions
+        # So we can add a empty dictionary where we will track open positions
+        if exchange_type == "future":
+            self.positions = {}
+
         self.open_orders = {}
         self.trades = []
         self.orders = []
 
         self.historical_balance = []
 
-    def add_market(self, symbol: str, base: str, quote: str):
+    def add_market(self, symbol: str, base: str, quote: str) -> None:
+        """
+        Adds a new market to the exchange.
+
+        This function simply adds the provided market details to a dictionary
+        of market map within the exchange.
+
+        :param symbol: (str) The symbol representing the market, e.g., 'BTC/USD'.
+        :param base: (str) The base currency in the market, e.g., 'BTC'.
+        :param quote: (str) The quote or counter currency in the market, e.g., 'USD'.
+        :param perpetual: (bool)
+
+        :return None:
+        """
         self.market_map[symbol] = [base, quote]
+        if self.exchange_type == "future":
+            self.positions[symbol] = 0
 
     def add_balance(self, symbol: str, amount: float):
         self.balances[symbol] = amount
@@ -81,10 +103,15 @@ class Exchange:
     def _open_orders(self):
         return True if len(self.open_orders) > 0 else False
 
-    def open_position(self, order: Order, timestamp: int) -> None:
-        """
-        Order went through and can be opened on the exchange.
+    def _adjust_balances_future(self, trade: Trade) -> None:
+        self.balances[self.market_map[trade.symbol][1]] += (
+            -((trade.side * 2) - 1) * trade.amount * trade.price - trade.fees
+        )
 
+        self.positions[trade.symbol] += trade.amount * ((trade.side * 2) - 1)
+
+    def _adjust_balances_spot(self, trade: Trade) -> None:
+        """
         We update the base and quote balance in this example of a spot exchange.
 
         Base update examples. balance += amount * (side * 2 -1).
@@ -95,23 +122,31 @@ class Exchange:
         Buy 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (1 * 2 -1) = 3'000 * 1 = 3'000
         Sell 0.1 BTC @ 30k USD: Balance['USD'] -= 0.1 * 30'000 * (0 * 2 -1) = 3'000 * -1 = -3'000
         """
-
-        order.status = "filled"
-
         # Balance update as described above
-        self.balances[self.market_map[order.symbol][0]] += order.amount * (
-            (order.side * 2) - 1
+        self.balances[self.market_map[trade.symbol][0]] += trade.amount * (
+            (trade.side * 2) - 1
         )
+
+        # Update the balances
+        self.balances[self.market_map[trade.symbol][1]] -= (
+            trade.amount * trade.price + trade.fees
+        ) * ((trade.side * 2) - 1)
+
+    def open_position(self, order: Order, timestamp: float) -> None:
+        """
+        Order went through and can be opened it on the exchange.
+        We calculate the fees and create a trade. This trade is then sent on
+        to open a position on either a spot or futures exchange.
+
+        :param order: (Order)
+        :param timestamp: (float)
+        """
+        order.status = "filled"
 
         # define the fee that will be used for the trade
         fee = self.taker_fee if order.taker else self.maker_fee
 
         fee_quote = abs(order.amount * order.price * fee)
-
-        # Update the balances
-        self.balances[self.market_map[order.symbol][1]] -= (
-            order.amount * order.price + fee_quote
-        ) * ((order.side * 2) - 1)
 
         # self.positions[order.symbol] = order.amount
 
@@ -126,17 +161,26 @@ class Exchange:
             entryTime=order.entryTime,
             eventTime=timestamp,
         )
+
         logger.info(f"Trade Executed {new_trade}")
 
         self.trades.append(new_trade)
         self.orders.append(order)
 
-    def close_position(self, symbol: str, price: float):
-        logger.info("Position Closed")
-        self.balances += self.positions[symbol] * price - abs(
-            self.positions[symbol] * price * self.taker_fee
-        )
-        self.positions.pop(symbol)
+        if self.exchange_type == "spot":
+            self._adjust_balances_spot(trade=new_trade)
+
+        if self.exchange_type == "future":
+            self._adjust_balances_future(trade=new_trade)
+
+        return new_trade
+
+    # def close_position(self, symbol: str, price: float):
+    #     logger.info("Position Closed")
+    #     self.balances += self.positions[symbol] * price - abs(
+    #         self.positions[symbol] * price * self.taker_fee
+    #     )
+    #     self.positions.pop(symbol)
 
 
 class OHLCExchange(Exchange):
@@ -155,6 +199,7 @@ class TOB_Exchange(Exchange):
     def __init__(
         self,
         fees: List[int] = [0, 2],
+        exchange_type: ExchangeType = "spot",
         latency: LogNormalLatency = LogNormalLatency(mean=5000, sigma=0.3),
     ):
         """
@@ -164,7 +209,7 @@ class TOB_Exchange(Exchange):
         :param latency: (List[int]) latency [mean, std] in us
 
         """
-        super().__init__(fees)
+        super().__init__(fees=fees, exchange_type=exchange_type)
 
         # Define latency summary metrics
         self.latency = latency
@@ -279,7 +324,7 @@ class TOB_Exchange(Exchange):
                 side=side,
                 taker=True,
                 price=None,
-                amount=amount,
+                amount=abs(amount),
                 entryTime=local_timestamp,
                 eventTime=timestamp,
             )
@@ -313,7 +358,7 @@ class TOB_Exchange(Exchange):
                 symbol=symbol,
                 side=side,
                 taker=False,
-                amount=amount,
+                amount=abs(amount),
                 price=price,
                 entryTime=local_timestamp,
                 eventTime=timestamp,
@@ -377,22 +422,33 @@ class TOB_Exchange(Exchange):
         Sanity check that we have enough balance to execute such an order before we even place it.
         """
         # If it is a buy, check that we have enough quote currency available to buy the base
-        if order.side:
-            if (
-                self.balances[self.market_map[order.symbol][1]]
-                < order.amount * order.price
-            ):
-                logger.warn(
-                    f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balances[self.market_map[order.symbol][1]]}"
-                )
-                return False
-        # else, check that we have enough base to sell it
-        else:
-            if self.balances[self.market_map[order.symbol][0]] < order.amount:
-                logger.warn(
-                    f"Sell Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount}, Available Amount: {self.balances[self.market_map[order.symbol][0]]}"
-                )
-                return False
+        if self.exchange_type == "spot":
+            if order.side:
+                if (
+                    self.balances[self.market_map[order.symbol][1]]
+                    < order.amount * order.price
+                ):
+                    logger.warn(
+                        f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balances[self.market_map[order.symbol][1]]}"
+                    )
+                    return False
+            # else, check that we have enough base to sell it
+            else:
+                if self.balances[self.market_map[order.symbol][0]] < order.amount:
+                    logger.warn(
+                        f"Sell Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount}, Available Amount: {self.balances[self.market_map[order.symbol][0]]}"
+                    )
+                    return False
+        elif self.exchange_type == "future":
+            if order.side:
+                if (
+                    self.balances[self.market_map[order.symbol][1]]
+                    < order.amount * order.price
+                ):
+                    logger.warn(
+                        f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balances[self.market_map[order.symbol][1]]}"
+                    )
+                    return False
 
         return True
 

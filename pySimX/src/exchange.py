@@ -142,6 +142,7 @@ class Exchange:
         :param timestamp: (float)
         """
         order.status = "filled"
+        order.eventTime = timestamp
 
         # define the fee that will be used for the trade
         fee = self.taker_fee if order.taker else self.maker_fee
@@ -467,7 +468,7 @@ class TOB_Exchange(Exchange):
                 o.price = order.new_price
                 o.amount = order.new_amount
 
-    def _execute_cancellation(self, order: CancelOrder) -> None:
+    def _execute_cancellation(self, order: CancelOrder, timestamp: float) -> None:
         """
         Actually cancel the order now that was in the queue. Since this order can also be executed in the meantime,
         we have to do a try:except.
@@ -476,6 +477,7 @@ class TOB_Exchange(Exchange):
             cancelled_order = order.order
 
             cancelled_order.status = "cancelled_order"
+            cancelled_order.eventTime = timestamp
 
             self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(
                 cancelled_order.price
@@ -604,7 +606,7 @@ class TOB_Exchange(Exchange):
 
         # If the event is a cancellation, cancel the order
         elif type(event) == CancelOrder:
-            self._execute_cancellation(event)
+            self._execute_cancellation(event, ts)
 
         # If the event is a public trade, check if it would lead to execution
         elif type(event) == Trade:

@@ -231,7 +231,7 @@ class TOB_Exchange(Exchange):
 
     def _add_latency(self, timestamp: float) -> float:
         # timestamp += np.random.lognormal(0, self.latency_dev, 1)[0] * self.latency_mean
-        timestamp += self.latency.estimate()
+        timestamp += int(self.latency.estimate())
         return timestamp
 
     def fetch_tob(self, symbol) -> dict[float]:

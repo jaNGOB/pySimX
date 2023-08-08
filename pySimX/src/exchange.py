@@ -30,14 +30,19 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+formatter = logging.Formatter(
+    "%(asctime)s - %(levelname)s - %(name)s - %(exchange_name)s - %(message)s"
+)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
 class Exchange:
     def __init__(
-        self, fees: List[int] = [0, 2], exchange_type: ExchangeType = "spot"
+        self,
+        fees: List[int] = [0, 2],
+        exchange_type: ExchangeType = "spot",
+        name: str = "",
     ) -> None:
         """
 
@@ -46,6 +51,8 @@ class Exchange:
         # Load the fees and transform them from basis-points into percent
         self.maker_fee = fees[0] / 10_000
         self.taker_fee = fees[1] / 10_000
+
+        self.logger = logging.LoggerAdapter(logger, {"exchange_name": name})
 
         self.balances = {}
 
@@ -143,6 +150,7 @@ class Exchange:
         """
         order.status = "filled"
         order.eventTime = timestamp
+        order.remainingAmount = order.remainingAmount - order.amount
 
         # define the fee that will be used for the trade
         fee = self.taker_fee if order.taker else self.maker_fee
@@ -163,7 +171,7 @@ class Exchange:
             eventTime=timestamp,
         )
 
-        logger.info(f"Trade Executed {new_trade}")
+        self.logger.info(f"Trade Executed {new_trade}")
 
         self.trades.append(new_trade)
         self.orders.append(order)
@@ -202,6 +210,7 @@ class TOB_Exchange(Exchange):
         fees: List[int] = [0, 2],
         exchange_type: ExchangeType = "spot",
         latency: LogNormalLatency = LogNormalLatency(mean=5000, sigma=0.3),
+        name: str = "",
     ):
         """
         Initialize the TOB Exchange.
@@ -210,7 +219,7 @@ class TOB_Exchange(Exchange):
         :param latency: (List[int]) latency [mean, std] in us
 
         """
-        super().__init__(fees=fees, exchange_type=exchange_type)
+        super().__init__(fees=fees, exchange_type=exchange_type, name=name)
 
         # Define latency summary metrics
         self.latency = latency
@@ -237,20 +246,20 @@ class TOB_Exchange(Exchange):
         return out
 
     def overview(self, symbol: str) -> None:
-        logger.info(
+        self.logger.info(
             f"Bid: {self.markets[symbol].bp:>8} | {self.markets[symbol].ap:>8} :Ask"
         )
 
-        logger.info("Open Buy Orders")
+        self.logger.info("Open Buy Orders")
         for i in self.open_orders["COMPBTC"][1]:
-            logger.info(f"{i} @ {self.open_orders['COMPBTC'][1][i].amount}")
+            self.logger.info(f"{i} @ {self.open_orders['COMPBTC'][1][i].amount}")
 
-        logger.info("Open Sell Orders")
+        self.logger.info("Open Sell Orders")
         for i in self.open_orders["COMPBTC"][0]:
-            logger.info(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
+            self.logger.info(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
 
     def load_trades(self, trades: List[float], symbol: str) -> None:
-        logger.info(f"Loading {len(trades)} trades for {symbol}")
+        self.logger.info(f"Loading {len(trades)} trades for {symbol}")
         # Iterate through the trades that need to be added to the events
         for i in trades:
             # make sure the event has a queue at a given timestamp
@@ -274,10 +283,10 @@ class TOB_Exchange(Exchange):
                 )
             )
 
-        logger.info(f"Trades loaded successfully")
+        self.logger.info(f"Trades loaded successfully")
 
     def load_tob(self, tob_updates: List[float], symbol: str) -> None:
-        logger.info(f"Loading {len(tob_updates)} TOB-Updates for {symbol}")
+        self.logger.info(f"Loading {len(tob_updates)} TOB-Updates for {symbol}")
         # Initialize a orders queue
         self.open_orders[symbol] = {}
         self.open_orders[symbol][1] = SortedDict()
@@ -299,7 +308,7 @@ class TOB_Exchange(Exchange):
             self.events[i[0]].append(
                 TOB(symbol=symbol, timestamp=i[0], bq=i[1], bp=i[2], ap=i[3], aq=i[4])
             )
-        logger.info(f"TOB-Updates loaded successfully")
+        self.logger.info(f"TOB-Updates loaded successfully")
 
     def market_order(
         self, symbol: str, amount: float, side: bool, local_timestamp: int
@@ -429,14 +438,14 @@ class TOB_Exchange(Exchange):
                     self.balances[self.market_map[order.symbol][1]]
                     < order.amount * order.price
                 ):
-                    logger.warn(
+                    self.logger.warn(
                         f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balances[self.market_map[order.symbol][1]]}"
                     )
                     return False
             # else, check that we have enough base to sell it
             else:
                 if self.balances[self.market_map[order.symbol][0]] < order.amount:
-                    logger.warn(
+                    self.logger.warn(
                         f"Sell Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount}, Available Amount: {self.balances[self.market_map[order.symbol][0]]}"
                     )
                     return False
@@ -446,7 +455,7 @@ class TOB_Exchange(Exchange):
                     self.balances[self.market_map[order.symbol][1]]
                     < order.amount * order.price
                 ):
-                    logger.warn(
+                    self.logger.warn(
                         f"Buy Order couldnt be opened, not enough balance available \nOpened Amount: {order.amount * order.price}, Available Amount: {self.balances[self.market_map[order.symbol][1]]}"
                     )
                     return False
@@ -486,7 +495,7 @@ class TOB_Exchange(Exchange):
             self.orders.append(cancelled_order)
 
         except Exception as e:
-            logger.warn(f"Cancellation failed, order {order} not open")
+            self.logger.warn(f"Cancellation failed, order {order} not open")
 
     def _execute_market(self, event: Order, timestamp: float) -> None:
         # We chose the Ask Price if we buy, the Bid Price if we sell
@@ -521,7 +530,7 @@ class TOB_Exchange(Exchange):
             if self.open_orders[trade.symbol][0].peekitem(0)[1].price <= trade.price:
                 # We have a match, pop the order out of the open orders and open the position
                 order = self.open_orders[trade.symbol][0].popitem(0)[1]
-                logger.info(f"Trade match found! Order {order} will be opened")
+                self.logger.info(f"Trade match found! Order {order} will be opened")
                 self.open_position(order=order, timestamp=timestamp)
 
         # else check if we have a open buy order and the public trade was a sell.
@@ -530,7 +539,7 @@ class TOB_Exchange(Exchange):
             if self.open_orders[trade.symbol][1].peekitem(-1)[1].price >= trade.price:
                 # We have a match, pop the order out of the open orders and open the position
                 order = self.open_orders[trade.symbol][1].popitem(-1)[1]
-                logger.info(f"Trade match found! Order {order} will be opened")
+                self.logger.info(f"Trade match found! Order {order} will be opened")
                 self.open_position(order=order, timestamp=timestamp)
 
     def _check_match(self, symbol: str, timestamp: float) -> None:
@@ -547,7 +556,7 @@ class TOB_Exchange(Exchange):
 
                 self.open_position(order=order, timestamp=timestamp)
 
-                logger.info(f"TOB match found! Order {order} will be opened")
+                self.logger.info(f"TOB match found! Order {order} will be opened")
 
                 if len(self.open_orders[symbol][1]) == 0:
                     break
@@ -565,7 +574,7 @@ class TOB_Exchange(Exchange):
 
                 self.open_position(order=order, timestamp=timestamp)
 
-                logger.info(f"TOB match found! Order {order} will be opened")
+                self.logger.info(f"TOB match found! Order {order} will be opened")
 
                 if len(self.open_orders[symbol][0]) == 0:
                     break
@@ -598,6 +607,7 @@ class TOB_Exchange(Exchange):
             else:
                 check = self._check_balance(event)
                 if check:
+                    self.logger.info(f"Order Opened. {event}")
                     self.open_orders[event.symbol][event.side][event.price] = event
 
         # If the event is a modification, change the order in question.
@@ -606,6 +616,7 @@ class TOB_Exchange(Exchange):
 
         # If the event is a cancellation, cancel the order
         elif type(event) == CancelOrder:
+            self.logger.info(f"Order Cancelled. {event}")
             self._execute_cancellation(event, ts)
 
         # If the event is a public trade, check if it would lead to execution

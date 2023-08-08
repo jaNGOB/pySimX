@@ -12,8 +12,8 @@ class cross_exchange:
         self.sensitivity = 20 / 10_000  # after a move of 4bps, replace the order
         self.initial_quote = initial_quote
 
-        self.last_buy_trade = 0
-        self.last_sell_trade = 0
+        self.last_buy_trade = -1
+        self.last_sell_trade = -1
         self.timestamp = None
 
         self.bid_open = None
@@ -44,21 +44,32 @@ class cross_exchange:
             for order in orders:
                 if order.status == "filled":
                     if order.side == 1:
-                        if self.last_buy_trade < order.eventTime:
-                            self.last_buy_trade = order.eventTime
-                            self.buy_open = False
+                        if self.last_buy_trade < order.order_id:
+                            self.last_buy_trade = order.order_id
                             # print("hedging")
                             self.hedging.market_order(
                                 self.symbol, self.amount, 0, self.timestamp
                             )
                     else:
-                        if self.last_sell_trade < order.eventTime:
-                            self.last_sell_trade = order.eventTime
-                            self.sell_open = False
+                        if self.last_sell_trade < order.order_id:
+                            self.last_sell_trade = order.order_id
                             # print("hedging")
                             self.hedging.market_order(
                                 self.symbol, self.amount, 1, self.timestamp
                             )
+
+        if len(self.hedging.trades) > 0:
+            orders = self.hedging.orders
+            for order in orders:
+                if order.status == "filled":
+                    if order.side == 1:
+                        if self.last_sell_trade < order.order_id:
+                            self.last_sell_trade = order.order_id
+                            self.sell_open = False
+                    else:
+                        if self.last_buy_trade < order.order_id:
+                            self.last_buy_trade = order.order_id
+                            self.buy_open = False
 
         # Open orders if they currently arent open
         if (
@@ -74,7 +85,7 @@ class cross_exchange:
             self.ask_open = hedging_ask
             self.sell_open = True
 
-        elif len(self.origin.open_orders[self.symbol][0]) > 0:
+        elif len(self.origin.open_orders[self.symbol][0]) == 1:
             # if the price moved too much, replace the order
             if abs(self.ask_open / hedging_ask - 1) > self.sensitivity:
                 new_price = round(hedging_ask * (1 + distance_up * self.distance), 8)
@@ -98,7 +109,7 @@ class cross_exchange:
 
         # if the price moved too much, replace the order
         elif (abs(self.bid_open / hedging_bid - 1) > self.sensitivity) and (
-            len(self.origin.open_orders[self.symbol][1]) > 0
+            len(self.origin.open_orders[self.symbol][1]) == 1
         ):
             new_price = round(hedging_bid * (1 - self.distance), 8)
             # print(f"Replacing buy {self.amount} @ {new_price} with {hedging_bid}")

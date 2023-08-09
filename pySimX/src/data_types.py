@@ -5,7 +5,13 @@ from enum import Enum
 from collections import OrderedDict
 
 
-OrderStatus = Enum("OrderStatus", ["open", "filled", "partially_filled", "cancelled"])
+class OrderStatus(Enum):
+    OPEN = "open"
+    FILLED = "filled"
+    PARTIALLY_FILLED = "partially_filled"
+    CANCELLED = "cancelled"
+
+
 ExchangeType = Enum("ExchangeType", ["future", "spot"])
 
 
@@ -41,7 +47,7 @@ class Order:
     price: Optional[float]
     entryTime: int
     eventTime: Optional[int] = None
-    status: OrderStatus = "open"
+    status: OrderStatus = OrderStatus.OPEN
     parentLevel: Optional[Level] = None
 
     def __post_init__(self):

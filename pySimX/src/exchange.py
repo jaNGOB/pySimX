@@ -18,7 +18,15 @@ import numpy as np
 from collections import deque
 from sortedcontainers import SortedDict
 from .matching_engine import OrderBook
-from .data_types import TOB, Order, Trade, ModifyOrder, CancelOrder, ExchangeType
+from .data_types import (
+    TOB,
+    Order,
+    Trade,
+    ModifyOrder,
+    CancelOrder,
+    ExchangeType,
+    OrderStatus,
+)
 from .latency_models import LogNormalLatency, ConstantLatency
 
 # from .analytics import PostTrade
@@ -148,7 +156,7 @@ class Exchange:
         :param order: (Order)
         :param timestamp: (float)
         """
-        order.status = "filled"
+        order.status = OrderStatus.FILLED
         order.eventTime = timestamp
         order.remainingAmount = order.remainingAmount - order.amount
 
@@ -485,7 +493,7 @@ class TOB_Exchange(Exchange):
         try:
             cancelled_order = order.order
 
-            cancelled_order.status = "cancelled_order"
+            cancelled_order.status = OrderStatus.CANCELLED
             cancelled_order.eventTime = timestamp
 
             self.open_orders[cancelled_order.symbol][cancelled_order.side].pop(

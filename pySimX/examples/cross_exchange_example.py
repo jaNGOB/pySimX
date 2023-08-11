@@ -1,3 +1,12 @@
+import os, sys
+
+parent_dir = os.path.abspath("..")
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+from src.data_types import OrderStatus
+
+
 class cross_exchange:
     def __init__(self, origin, hedging, initial_quote):
         self.origin = origin
@@ -42,7 +51,7 @@ class cross_exchange:
         if len(self.origin.trades) > 0:
             orders = self.origin.orders
             for order in orders:
-                if order.status == "filled":
+                if order.status in [OrderStatus.FILLED, OrderStatus.CANCELLED]:
                     if order.side == 1:
                         if self.last_buy_trade < order.order_id:
                             self.last_buy_trade = order.order_id
@@ -61,7 +70,7 @@ class cross_exchange:
         if len(self.hedging.trades) > 0:
             orders = self.hedging.orders
             for order in orders:
-                if order.status == "filled":
+                if order.status in [OrderStatus.FILLED, OrderStatus.CANCELLED]:
                     if order.side == 1:
                         if self.last_sell_trade < order.order_id:
                             self.last_sell_trade = order.order_id
@@ -98,7 +107,11 @@ class cross_exchange:
                 )
                 self.ask_open = hedging_ask
 
-        if len(self.origin.open_orders[self.symbol][1]) == 0 and not self.buy_open:
+        if (
+            len(self.origin.open_orders[self.symbol][1]) == 0
+            and not self.buy_open
+            and skew > 0.2
+        ):
             new_price = round(hedging_ask * (1 - self.distance), 8)
             # print(f"New Buy {self.amount} @ {new_price} with {hedging_bid}")
             self.origin.limit_order(
@@ -146,5 +159,6 @@ class cross_exchange:
 
                 # print(self.bid_open, hedging_tob['bid_price'], len(origin.open_orders[self.symbol][1]), self.skew, abs(self.bid_open / hedging_tob['bid_price'] - 1) * 10_000)
                 update["ts"] = self.timestamp
+                update["skew"] = self.skew
 
                 self.balances.append(update)

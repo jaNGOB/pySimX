@@ -14,8 +14,8 @@ TODO:
 """
 
 from typing import List, Literal, Optional
-import numpy as np
 from collections import deque
+from copy import deepcopy
 from sortedcontainers import SortedDict
 from .matching_engine import OrderBook
 from .data_types import (
@@ -54,7 +54,8 @@ class Exchange:
     ) -> None:
         """
 
-        :param fees: (List[int]) a list containing two values for maker and taker fees expressed in basispoints.
+        :param fees: (List[int]) a list containing two values for maker and taker
+        fees expressed in basispoints.
         """
         # Load the fees and transform them from basis-points into percent
         self.maker_fee = fees[0] / 10_000
@@ -238,7 +239,6 @@ class TOB_Exchange(Exchange):
         self.events = SortedDict()
 
     def _add_latency(self, timestamp: float) -> float:
-        # timestamp += np.random.lognormal(0, self.latency_dev, 1)[0] * self.latency_mean
         timestamp += int(self.latency.estimate())
         return timestamp
 
@@ -253,24 +253,25 @@ class TOB_Exchange(Exchange):
         }
         return out
 
-    def overview(self, symbol: str) -> None:
-        self.logger.info(
-            f"Bid: {self.markets[symbol].bp:>8} | {self.markets[symbol].ap:>8} :Ask"
-        )
+    # def overview(self, symbol: str) -> None:
+    #     self.logger.info(
+    #         f"Bid: {self.markets[symbol].bp:>8} | {self.markets[symbol].ap:>8} :Ask"
+    #     )
 
-        self.logger.info("Open Buy Orders")
-        for i in self.open_orders["COMPBTC"][1]:
-            self.logger.info(f"{i} @ {self.open_orders['COMPBTC'][1][i].amount}")
+    #     self.logger.info("Open Buy Orders")
+    #     for i in self.open_orders["COMPBTC"][1]:
+    #         self.logger.info(f"{i} @ {self.open_orders['COMPBTC'][1][i].amount}")
 
-        self.logger.info("Open Sell Orders")
-        for i in self.open_orders["COMPBTC"][0]:
-            self.logger.info(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
+    #     self.logger.info("Open Sell Orders")
+    #     for i in self.open_orders["COMPBTC"][0]:
+    #         self.logger.info(f"{i} @ {self.open_orders['COMPBTC'][0][i].amount}")
 
     def load_trades(self, trades: List[float], symbol: str) -> None:
         self.logger.info(f"Loading {len(trades)} trades for {symbol}")
         # Iterate through the trades that need to be added to the events
         for i in trades:
             # make sure the event has a queue at a given timestamp
+            i[0] = int(i[0])
             if i[0] not in self.events.keys():
                 self.events[i[0]] = deque()
 
@@ -291,7 +292,7 @@ class TOB_Exchange(Exchange):
                 )
             )
 
-        self.logger.info(f"Trades loaded successfully")
+        self.logger.info("Trades loaded successfully")
 
     def load_tob(self, tob_updates: List[float], symbol: str) -> None:
         self.logger.info(f"Loading {len(tob_updates)} TOB-Updates for {symbol}")
@@ -303,20 +304,26 @@ class TOB_Exchange(Exchange):
         # Set initial Orderbook as the start
         tob = tob_updates[0]
         self.markets[symbol] = TOB(
-            symbol=symbol, timestamp=tob[0], bq=tob[1], bp=tob[2], ap=tob[3], aq=tob[4]
+            symbol=symbol,
+            timestamp=int(tob[0]),
+            bq=tob[1],
+            bp=tob[2],
+            ap=tob[3],
+            aq=tob[4],
         )
         # The rest will be taken apart and used as events for the backtester
         # self._process_tob_updates(tob_updates[1:])
 
         # Add all the TOB Updates to the queue
         for i in tob_updates[1:]:
+            i[0] = int(i[0])
             if i[0] not in self.events.keys():
                 self.events[i[0]] = deque()
 
             self.events[i[0]].append(
                 TOB(symbol=symbol, timestamp=i[0], bq=i[1], bp=i[2], ap=i[3], aq=i[4])
             )
-        self.logger.info(f"TOB-Updates loaded successfully")
+        self.logger.info("TOB-Updates loaded successfully")
 
     def market_order(
         self, symbol: str, amount: float, side: bool, local_timestamp: int
@@ -333,10 +340,10 @@ class TOB_Exchange(Exchange):
         timestamp = self._add_latency(local_timestamp)
 
         # If there is already an event in the queue at that time, add it at the end
-        if timestamp not in self.events.keys():
-            self.events[timestamp] = deque()
+        if timestamp not in self.live_events.keys():
+            self.live_events[timestamp] = deque()
 
-        self.events[timestamp].append(
+        self.live_events[timestamp].append(
             Order(
                 symbol=symbol,
                 side=side,
@@ -368,10 +375,10 @@ class TOB_Exchange(Exchange):
         timestamp = self._add_latency(local_timestamp)
 
         # If there is already an event in the queue at that time, add it at the end
-        if timestamp not in self.events.keys():
-            self.events[timestamp] = deque()
+        if timestamp not in self.live_events.keys():
+            self.live_events[timestamp] = deque()
 
-        self.events[timestamp].append(
+        self.live_events[timestamp].append(
             Order(
                 symbol=symbol,
                 side=side,
@@ -393,11 +400,13 @@ class TOB_Exchange(Exchange):
         """
         # Add latency simulation
         timestamp = self._add_latency(self.markets[order.symbol].timestamp)
-        if timestamp not in self.events.keys():
-            self.events[timestamp] = deque()
+        if timestamp not in self.live_events.keys():
+            self.live_events[timestamp] = deque()
 
         # Append the CancelOrder
-        self.events[timestamp].append(CancelOrder(symbol=order.symbol, order=order))
+        self.live_events[timestamp].append(
+            CancelOrder(symbol=order.symbol, order=order)
+        )
 
     def modify_order(
         self,
@@ -414,14 +423,14 @@ class TOB_Exchange(Exchange):
         new_order = ModifyOrder(symbol=order.symbol, order=order)
 
         # If there is a change in price, add the information to the new_order
-        if price != None:
+        if price is not None:
             new_order.new_price = price
         # If there are no changes, keep the old price
         else:
             new_order.new_price = order.price
 
         # If there is a change in amount, add the information to the new_order
-        if amount != None:
+        if amount is not None:
             new_order.new_amount = amount
 
         else:
@@ -430,16 +439,18 @@ class TOB_Exchange(Exchange):
         timestamp = self._add_latency(self.markets[order.symbol].timestamp)
 
         # If there is already an event in the queue at that time, add it at the end
-        if timestamp not in self.events.keys():
-            self.events[timestamp] = deque()
+        if timestamp not in self.live_events.keys():
+            self.live_events[timestamp] = deque()
 
-        self.events[timestamp].append(new_order)
+        self.live_events[timestamp].append(new_order)
 
     def _check_balance(self, order: Order) -> bool:
         """
-        Sanity check that we have enough balance to execute such an order before we even place it.
+        Sanity check that we have enough balance to execute such an order
+        before we even place it.
         """
-        # If it is a buy, check that we have enough quote currency available to buy the base
+        # If it is a buy, check that we have enough quote currency
+        # available to buy the base
         if self.exchange_type == "spot":
             if order.side:
                 if (
@@ -472,7 +483,8 @@ class TOB_Exchange(Exchange):
 
     def _execute_modification(self, order: ModifyOrder) -> None:
         """
-        function that finds the order by the order_id and replaces it by the new that is sent.
+        function that finds the order by the order_id
+        and replaces it by the new that is sent.
         The order_id is not updated so we can just look for it directly.
 
         :param order: (Order)
@@ -487,7 +499,8 @@ class TOB_Exchange(Exchange):
 
     def _execute_cancellation(self, order: CancelOrder, timestamp: float) -> None:
         """
-        Actually cancel the order now that was in the queue. Since this order can also be executed in the meantime,
+        Actually cancel the order now that was in the queue. Since this order can also
+        be executed in the meantime,
         we have to do a try:except.
         """
         try:
@@ -523,42 +536,50 @@ class TOB_Exchange(Exchange):
 
     def _check_match_trades(self, trade: Trade, timestamp: float) -> None:
         """
-        Function that 'executes' a trade and checks if there is an open order of the user which would be hit.
+        Function that 'executes' a trade and checks if there is an open order
+        of the user which would be hit.
 
         :param trade: (Trade) trade that the public executed
         :param timestamp: (float) Timestamp
 
         :return: None
         """
-        # if the public trade is a buy and we have an open sell order, go through the sell orders
+        # if the public trade is a buy and we have an open sell order,
+        # go through the sell orders
         # and see if one would have gotten hit by it.
         # public_price >= open_order
         if (trade.side == 1) and len(self.open_orders[trade.symbol][0]) > 0:
-            # check the lowest value (0) in our open orders and see if its below the buy order price
+            # check the lowest value (0) in our open orders
+            # and see if its below the buy order price
             if self.open_orders[trade.symbol][0].peekitem(0)[1].price <= trade.price:
-                # We have a match, pop the order out of the open orders and open the position
+                # We have a match, pop the order out of the open orders
+                # and open the position
                 order = self.open_orders[trade.symbol][0].popitem(0)[1]
                 self.logger.info(f"Trade match found! Order {order} will be opened")
                 self.open_position(order=order, timestamp=timestamp)
 
         # else check if we have a open buy order and the public trade was a sell.
         elif (trade.side == 0) and len(self.open_orders[trade.symbol][1]) > 0:
-            # check the last value in the SortedDict (-1) which will be the highest buy price and look for a match
+            # check the last value in the SortedDict (-1) which will be the highest buy
+            # price and look for a match
             if self.open_orders[trade.symbol][1].peekitem(-1)[1].price >= trade.price:
-                # We have a match, pop the order out of the open orders and open the position
+                # We have a match, pop the order out of the open orders
+                # and open the position
                 order = self.open_orders[trade.symbol][1].popitem(-1)[1]
                 self.logger.info(f"Trade match found! Order {order} will be opened")
                 self.open_position(order=order, timestamp=timestamp)
 
     def _check_match(self, symbol: str, timestamp: float) -> None:
-        # If there is a buy order and the price is above the current ask price, we execute it
+        # If there is a buy order and the price is above the current ask price,
+        # we execute it
         if len(self.open_orders[symbol][1]) > 0:
             while (
                 self.markets[symbol].ap
                 <= self.open_orders[symbol][1].peekitem(-1)[1].price
             ):
                 order = self.open_orders[symbol][1].popitem(0)[1]
-                # If the price moved in the meantime which leads to direct execution, it was a taker
+                # If the price moved in the meantime which leads to direct execution,
+                # it was a taker
                 if order.entryTime == timestamp:
                     order.taker = True
 
@@ -569,14 +590,16 @@ class TOB_Exchange(Exchange):
                 if len(self.open_orders[symbol][1]) == 0:
                     break
 
-        # If there is a sell order and the price is lower than the current best bid, we execute it
+        # If there is a sell order and the price is lower than the current best bid,
+        # we execute it
         if len(self.open_orders[symbol][0]) > 0:
             while (
                 self.markets[symbol].bp
                 >= self.open_orders[symbol][0].peekitem(0)[1].price
             ):
                 order = self.open_orders[symbol][0].popitem(-1)[1]
-                # If the price moved in the meantime which leads to direct execution, it was a taker
+                # If the price moved in the meantime which leads to direct execution,
+                # it was a taker
                 if order.entryTime == timestamp:
                     order.taker = True
 
@@ -589,8 +612,8 @@ class TOB_Exchange(Exchange):
 
     def _simulation_step(self) -> None:
         # Select the current event and remove it from the Queue
-        ts = self.events.peekitem(0)[0]
-        event = self.events.peekitem(0)[1].popleft()
+        ts = self.live_events.peekitem(0)[0]
+        event = self.live_events.peekitem(0)[1].popleft()
 
         ##############################
         ### Could be done by switch ##
@@ -632,8 +655,8 @@ class TOB_Exchange(Exchange):
             self._check_match_trades(event, ts)
 
         # Remove the event timestamp if there are no more in the queue at that time
-        if len(self.events.peekitem(0)[1]) == 0:
-            self.events.popitem(0)
+        if len(self.live_events.peekitem(0)[1]) == 0:
+            self.live_events.popitem(0)
 
         # Finally, check for a match in the current pair
         # event.symbol exists in all possible updates so we can safely call it
@@ -644,9 +667,14 @@ class TOB_Exchange(Exchange):
     # def run_analytics(self):
     #     analytics = PostTrade(self.trades)
 
+    def prepare_backtest(self):
+        # self.live_events = self.events.copy()
+        self.live_events = deepcopy(self.events)
+
     def run_simulation(self, strategy, symbol):
         strat = strategy(symbol)
-        while len(self.events) > 0:
+        self.live_events = self.events.copy()
+        while len(self.live_events) > 0:
             strat.run_strategy()
             self._simulation_step()
             self._update_balance(symbol)

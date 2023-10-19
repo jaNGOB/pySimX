@@ -26,6 +26,18 @@ class TOB:
     aq: float
 
 
+# OHLCV
+@dataclass
+class OHLCV:
+    symbol: str
+    timestamp: int  # Open Timestamp
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+
+
 # Orderbook level
 @dataclass
 class Level:

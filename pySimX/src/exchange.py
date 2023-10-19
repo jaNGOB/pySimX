@@ -19,6 +19,7 @@ from copy import deepcopy
 from sortedcontainers import SortedDict
 from .matching_engine import OrderBook
 from .data_types import (
+    OHLCV,
     TOB,
     Order,
     Trade,
@@ -56,6 +57,8 @@ class Exchange:
 
         :param fees: (List[int]) a list containing two values for maker and taker
         fees expressed in basispoints.
+        :exchange_type: (ExchangeType[Spot, Future])
+        :name: (str)
         """
         # Load the fees and transform them from basis-points into percent
         self.maker_fee = fees[0] / 10_000
@@ -202,8 +205,45 @@ class Exchange:
 
 
 class OHLCExchange(Exchange):
-    def __init__(self, initial_balance: int = 10000, fees: List[int] = [0, 2]):
-        super().__init__(initial_balance, fees)
+    def __init__(
+        self,
+        fees: List[int] = [0, 2],
+        exchange_type: ExchangeType = "spot",
+        name: str = "",
+    ):
+        """
+        Initialize the OHLC Exchange.
+
+        :param fees: (List[int]) fees defined as basispoints [maker, taker]
+        :param exchange_typ" (ExchangeType)
+        """
+        super().__init__(fees=fees, exchange_type=exchange_type, name=name)
+
+        self.events = SortedDict()
+
+    def load_ohlcv(self, symbol: str, candles):
+        self.logger.info(f"Loading {len(candles)} Candles for {symbol}")
+        # Iterate through the trades that need to be added to the events
+        for i in candles:
+            # make sure the event has a queue at a given timestamp
+            i[0] = int(i[0])
+            if i[0] not in self.events.keys():
+                self.events[i[0]] = deque()
+
+            # once were sure there is a queue, append the trade to the timestamp
+            self.events[i[0]].append(
+                OHLCV(
+                    symbol=symbol,
+                    timestamp=i[0],
+                    open=i[1],
+                    high=i[2],
+                    low=i[3],
+                    close=i[4],
+                    volume=i[5],
+                )
+            )
+
+        self.logger.info("OHLCV Candles loaded successfully")
 
 
 class TickExchange(Exchange):
@@ -416,7 +456,8 @@ class TOB_Exchange(Exchange):
     ) -> None:
         """
         To modify an order, we first open a modification message and assign it.
-        Next we check if we received instructions to change the price or amount and add the information where necessary
+        Next we check if we received instructions to change the price or amount
+        and add the information where necessary
         Finally we add some latency and append it to the events queue.
         """
 
@@ -516,7 +557,7 @@ class TOB_Exchange(Exchange):
             self.orders.append(cancelled_order)
 
         except Exception as e:
-            self.logger.warn(f"Cancellation failed, order {order} not open")
+            self.logger.warn(f"Cancellation failed, order {order} not open {e}")
 
     def _execute_market(self, event: Order, timestamp: float) -> None:
         # We chose the Ask Price if we buy, the Bid Price if we sell
